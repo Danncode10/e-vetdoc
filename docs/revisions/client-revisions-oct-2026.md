@@ -200,8 +200,8 @@ Every stage ends with its own automated tests, lint, and a commit. Tests live in
 - [x] **Tests** `tests/15-booking-capacity.spec.ts`: capacity 2 + 3 simultaneous bookings → exactly 2 succeed; full slot shown as fully booked; server running in UTC still enforces the limit
 
 ### Stage 7 — Cancel options per role (#7)
-- [ ] Vet: no cancel action. Admin/Staff: clinic reasons. Owner: owner reasons
-- [ ] **Tests** `tests/16-cancel-options.spec.ts`
+- [x] Vet: no cancel action. Admin/Staff: clinic reasons. Owner: owner reasons
+- [x] **Tests** `tests/16-cancel-options.spec.ts`
 
 ### Stage 8 — Final QA + PR
 - [ ] `pnpm lint` + `pnpm build` clean

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { XCircle, Stethoscope, Calendar, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CANCEL_REASONS, type CancelAudience } from "@/lib/cancellation-reasons";
 
 function fmtDate(iso: string) {
   return new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric" }).format(new Date(iso));
@@ -13,18 +14,15 @@ function fmtTime(iso: string) {
 
 interface CancelModalProps {
   appointment: any;
+  /** Owners see personal reasons; the clinic front desk sees clinic-side reasons. */
+  audience?: CancelAudience;
   onConfirm: (reason: string) => Promise<void>;
   onClose: () => void;
 }
 
-const CANCEL_REASONS = [
-  { value: "owner_request", label: "I need to reschedule" },
-  { value: "pet_health_issue", label: "My pet is unwell / not ready" },
-  { value: "other", label: "Other reason" },
-];
-
-export function CancelModal({ appointment, onConfirm, onClose }: CancelModalProps) {
-  const [reason, setReason] = React.useState("owner_request");
+export function CancelModal({ appointment, audience = "owner", onConfirm, onClose }: CancelModalProps) {
+  const reasons = CANCEL_REASONS[audience];
+  const [reason, setReason] = React.useState<string>(reasons[0].value);
   const [isPending, setIsPending] = React.useState(false);
 
   const petName = appointment.pets?.name || "your pet";
@@ -94,7 +92,7 @@ export function CancelModal({ appointment, onConfirm, onClose }: CancelModalProp
               Reason for cancellation
             </p>
             <div className="space-y-2">
-              {CANCEL_REASONS.map((r) => (
+              {reasons.map((r) => (
                 <label
                   key={r.value}
                   className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all select-none ${

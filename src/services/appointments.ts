@@ -9,6 +9,7 @@ import type {
   Tables,
 } from "@/types/supabase";
 import { listPetsForCurrentUser } from "@/services/pets";
+import { CANCEL_REASONS, cancelAudienceFor, type CancellationReason } from "@/lib/cancellation-reasons";
 
 export type Appointment = Tables<"appointments">;
 export type AppointmentInsert = TablesInsert<"appointments">;
@@ -141,14 +142,19 @@ export async function updateAppointment(id: string, updates: AppointmentUpdate) 
 
 export async function cancelAppointment(id: string, reason?: string) {
   // Owners may cancel their own bookings; RLS limits them to their own rows.
-  await requireAppointmentManager({ allowOwner: true });
+  const profile = await requireAppointmentManager({ allowOwner: true });
+  const allowedReasons = CANCEL_REASONS[cancelAudienceFor(profile.role)].map((r) => r.value);
+  if (reason && !allowedReasons.includes(reason as CancellationReason)) {
+    throw new Error("Choose a valid cancellation reason.");
+  }
+  const cancellationReason = (reason as CancellationReason | undefined) ?? allowedReasons[0];
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("appointments")
     .update({
       status: "cancelled",
       cancelled_at: new Date().toISOString(),
-      cancellation_reason: (reason as any) || "owner_request",
+      cancellation_reason: cancellationReason,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id)

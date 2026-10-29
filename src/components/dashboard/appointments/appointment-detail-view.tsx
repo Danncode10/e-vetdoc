@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cancelAppointment } from "@/services/appointments";
 import { CancelModal } from "@/components/dashboard/appointments/cancel-modal";
+import { cancelAudienceFor } from "@/lib/cancellation-reasons";
 import { QuickBillingDialog } from "@/components/dashboard/billing/quick-billing-dialog";
 import { useRouter } from "next/navigation";
 function fmtDate(iso: string) {
@@ -444,7 +445,9 @@ export function AppointmentDetailView({
                 <div>
                   <h4 className="text-sm font-semibold text-destructive">Cancel this appointment</h4>
                   <p className="text-xs text-muted-foreground mt-1">
-                    This action cannot be undone. You will need to book a new appointment if you change your mind.
+                    {userRole === "owner"
+                      ? "This action cannot be undone. You will need to book a new appointment if you change your mind."
+                      : "This action cannot be undone. The owner will need to book a new appointment."}
                   </p>
                 </div>
                 <Button
@@ -464,6 +467,7 @@ export function AppointmentDetailView({
         {showCancelModal && (
           <CancelModal
             appointment={appointment}
+            audience={cancelAudienceFor(userRole)}
             onClose={() => setShowCancelModal(false)}
             onConfirm={async (reason) => {
               try {

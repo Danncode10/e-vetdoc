@@ -25,6 +25,7 @@ import type { UserRole } from "@/lib/dashboard-features";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { CancelModal } from "@/components/dashboard/appointments/cancel-modal";
+import { cancelAudienceFor } from "@/lib/cancellation-reasons";
 
 function fmtDate(iso: string) {
   return new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric" }).format(new Date(iso));
@@ -132,7 +133,9 @@ export function AppointmentsTab({ role, userId }: { role: UserRole; userId: stri
     if (!cancelTarget) return;
     await cancelAppointment(cancelTarget.id, reason);
     toast.success("Appointment cancelled", {
-      description: `Your ${cancelTarget.services?.name || "appointment"} has been cancelled.`,
+      description: role === "owner"
+        ? `Your ${cancelTarget.services?.name || "appointment"} has been cancelled.`
+        : `${cancelTarget.pets?.name || "The patient"}'s ${cancelTarget.services?.name || "appointment"} has been cancelled.`,
     });
     setCancelTarget(null);
     await loadAppointments();
@@ -471,6 +474,7 @@ export function AppointmentsTab({ role, userId }: { role: UserRole; userId: stri
       {cancelTarget && (
         <CancelModal
           appointment={cancelTarget}
+          audience={cancelAudienceFor(role)}
           onConfirm={handleCancelConfirm}
           onClose={() => setCancelTarget(null)}
         />
