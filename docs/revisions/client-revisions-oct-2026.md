@@ -206,7 +206,7 @@ Every stage ends with its own automated tests, lint, and a commit. Tests live in
 ### Stage 8 — Final QA + PR
 - [x] `pnpm build` passes; `pnpm lint` adds no new problems (the repo already had 354 lint findings on `main`; this branch has 353)
 - [x] All new specs + existing booking/clinical flows pass (44/44, also with the server on UTC like Vercel)
-- [ ] Push to fork, open PR to `Vinz-ops/e-vetdoc:main`
+- [x] Push to fork, open PR to `Vinz-ops/e-vetdoc:main` — [PR #8](https://github.com/Vinz-ops/e-vetdoc/pull/8)
 
 ---
 
