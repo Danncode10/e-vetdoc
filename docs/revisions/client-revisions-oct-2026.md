@@ -162,13 +162,13 @@ Every stage ends with its own automated tests, lint, and a commit. Tests live in
 - [x] Fork `Vinz-ops/e-vetdoc` → `Danncode10/e-vetdoc`, clone as `e-vetdoc-vinz`
 - [x] Test Supabase (`e-vetdoc test`) restored and migrations synced with the repo
 - [x] Branch `revisions/role-approval`, dependencies installed
-- [ ] Staff test account created; `TEST_STAFF_*` + Turnstile test keys in `.env.local`
+- [x] Staff test account created; `TEST_STAFF_*` + Turnstile test keys in `.env.local`
 
 ### Stage 1 — Database: Staff role, approvals, permissions (#1, #2, #3, #4)
-- [ ] Migration `add_staff_role` (enum value)
-- [ ] Migration `account_approval_and_staff_access` (approval columns, sign-up trigger, guard trigger, RLS for Staff)
-- [ ] Applied to test Supabase + `src/types/supabase.ts` regenerated
-- [ ] **Tests** `tests/10-db-approval-rls.spec.ts`: new sign-ups are pending with least-privilege role, users can't self-approve, pending owners can't add pets, Staff can read clinic data but can't change roles
+- [x] Migration `add_staff_role` (enum value)
+- [x] Migration `account_approval_and_staff_access` (approval columns, sign-up trigger, guard trigger, RLS for Staff)
+- [x] Applied to test Supabase + `src/types/supabase.ts` regenerated
+- [x] **Tests** `tests/10-db-approval-rls.spec.ts`: new sign-ups are pending with least-privilege role, users can't self-approve, pending owners can't add pets, Staff can read clinic data but can't change roles
 
 ### Stage 2 — Staff role + permission matrix in the app (#1, #4)
 - [ ] Shared role helpers (`isAdminOrStaff`, `isClinicMember`) in `authorization.ts` and `dashboard-features.ts`

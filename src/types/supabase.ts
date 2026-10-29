@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.17"
   }
   graphql_public: {
     Tables: {
@@ -758,6 +758,9 @@ export type Database = {
       profiles: {
         Row: {
           address: string | null
+          approval_status: Database["public"]["Enums"]["approval_status"]
+          approved_at: string | null
+          approved_by: string | null
           created_at: string
           email: string | null
           emergency_contact_name: string | null
@@ -766,10 +769,14 @@ export type Database = {
           id: string
           is_active: boolean
           phone: string | null
+          requested_role: Database["public"]["Enums"]["user_role"] | null
           role: Database["public"]["Enums"]["user_role"] | null
         }
         Insert: {
           address?: string | null
+          approval_status?: Database["public"]["Enums"]["approval_status"]
+          approved_at?: string | null
+          approved_by?: string | null
           created_at?: string
           email?: string | null
           emergency_contact_name?: string | null
@@ -778,10 +785,14 @@ export type Database = {
           id: string
           is_active?: boolean
           phone?: string | null
+          requested_role?: Database["public"]["Enums"]["user_role"] | null
           role?: Database["public"]["Enums"]["user_role"] | null
         }
         Update: {
           address?: string | null
+          approval_status?: Database["public"]["Enums"]["approval_status"]
+          approved_at?: string | null
+          approved_by?: string | null
           created_at?: string
           email?: string | null
           emergency_contact_name?: string | null
@@ -790,9 +801,18 @@ export type Database = {
           id?: string
           is_active?: boolean
           phone?: string | null
+          requested_role?: Database["public"]["Enums"]["user_role"] | null
           role?: Database["public"]["Enums"]["user_role"] | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       schedule_audit_logs: {
         Row: {
@@ -1040,6 +1060,7 @@ export type Database = {
         | "finished"
         | "paid"
         | "booked"
+      approval_status: "pending" | "approved" | "rejected"
       cancellation_reason:
         | "owner_request"
         | "clinic_emergency"
@@ -1062,7 +1083,7 @@ export type Database = {
         | "pet_health_issue"
         | "other"
       schedule_status: "active" | "inactive"
-      user_role: "admin" | "veterinarian" | "owner"
+      user_role: "admin" | "veterinarian" | "owner" | "staff"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1206,6 +1227,7 @@ export const Constants = {
         "paid",
         "booked",
       ],
+      approval_status: ["pending", "approved", "rejected"],
       cancellation_reason: [
         "owner_request",
         "clinic_emergency",
@@ -1230,7 +1252,7 @@ export const Constants = {
         "other",
       ],
       schedule_status: ["active", "inactive"],
-      user_role: ["admin", "veterinarian", "owner"],
+      user_role: ["admin", "veterinarian", "owner", "staff"],
     },
   },
 } as const
