@@ -105,6 +105,16 @@ export async function createAppointment(input: AppointmentInsert) {
   return data;
 }
 
+// Appointments in these statuses no longer hold a place in a schedule slot.
+const INACTIVE_BOOKING_STATUSES = ["cancelled", "no_show"] as const;
+
+/** Whether a booking's clinic-local time (e.g. "09:00:00") falls in [startHour, endHour). */
+function isInSlotHours(preferredTime: string | null, startHour: number, endHour: number) {
+  if (!preferredTime) return true; // No time recorded: count it against every slot that day.
+  const hour = Number(preferredTime.split(":")[0]);
+  return hour >= startHour && hour < endHour;
+}
+
 const APPOINTMENT_MANAGEMENT_ERROR = "Only Admin or Staff can manage appointments.";
 
 // Appointment management (cancel, schedule, reschedule, no-show) belongs to the front
@@ -346,19 +356,33 @@ export async function listPetAppointments(petId: string) {
 }
 
 export async function requestAppointment(input: Omit<AppointmentInsert, 'owner_id' | 'id'>) {
-  const { profile } = await requireAuth();
+  await requireAuth();
   // Validate that the pet_id in input is linked to the owner's profile
   const pets = await listPetsForCurrentUser();
   const petIds = pets.map(pet => pet.id);
   if (!petIds.includes(input.pet_id)) {
     throw new Error("You can only request appointments for your own pets.");
   }
-  // Now create the appointment with the owner_id set to the authenticated user's id
-  const appointmentInput: AppointmentInsert = {
-    ...input,
-    owner_id: profile.id,
-  };
-  return createAppointment(appointmentInput);
+  if (!input.preferred_date || !input.preferred_time) {
+    throw new Error("Please choose a date and time slot.");
+  }
+
+  // Booking is approved automatically when the slot has room. The capacity check and
+  // insert happen atomically in the database, so the last spot cannot be double-booked.
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("book_appointment", {
+    p_pet_id: input.pet_id,
+    p_service_id: input.service_id ?? undefined,
+    p_preferred_date: input.preferred_date,
+    p_preferred_time: input.preferred_time,
+    p_scheduled_start: input.scheduled_start ?? undefined,
+    p_scheduled_end: input.scheduled_end ?? undefined,
+    p_reason: input.reason ?? undefined,
+    p_notes: input.notes ?? undefined,
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath("/dashboard/appointments");
+  return data;
 }
 
 export async function getVeterinarianSchedule(veterinarianId: string, date: string) {
@@ -661,51 +685,19 @@ export async function getAvailableSlots(
     return { slots: [], scheduled: [] };
   }
 
-  // 3. Get already-booked appointments for this date
+  // 3. Count bookings that already hold a place on this date.
   //
-  // IMPORTANT: scheduled_start was created with new Date(date).setHours(h,m,0,0).toISOString()
-  // which uses the *server/browser local time* — NOT UTC. For UTC+8, 9 AM local = 01:00 UTC.
-  // To safely cover any timezone, we widen the query window by ±24 hours and then
-  // filter precisely in JS using local-hour comparison (preferred_date string match).
-  //
-  // For legacy appointments (scheduled_start IS NULL), we match by preferred_date directly.
-
-  // Build a wide UTC window: the full 24-hour span of the date ±1 day so we never miss
-  // an appointment regardless of server timezone.
-  const [yr, mo, dy] = date.split("-").map(Number);
-  const windowStart = new Date(Date.UTC(yr, mo - 1, dy - 1, 0, 0, 0, 0)); // day before UTC midnight
-  const windowEnd   = new Date(Date.UTC(yr, mo - 1, dy + 1, 23, 59, 59, 999)); // day after UTC midnight
-
-  // Query 1: appointments that have scheduled_start (new flow)
-  let q1 = supabase
+  // Slot membership uses the clinic-local preferred_date + preferred_time, which do not
+  // depend on any timezone. (scheduled_start is a UTC instant built in the booker's
+  // browser timezone, so comparing it with server-local slot times broke the booking
+  // limit on UTC servers such as Vercel.) This mirrors public.book_appointment().
+  const { data: bookedAppts, error: bookedError } = await supabase
     .from("appointments")
     .select("scheduled_start, scheduled_end, preferred_date, preferred_time")
-    .in("status", ["booked"])
-    .gte("scheduled_start", windowStart.toISOString())
-    .lte("scheduled_start", windowEnd.toISOString());
-
-  if (veterinarianId) q1 = q1.eq("assigned_veterinarian_id", veterinarianId);
-
-  // Query 2: legacy appointments with preferred_date and no scheduled_start
-  let q2 = supabase
-    .from("appointments")
-    .select("scheduled_start, scheduled_end, preferred_date, preferred_time")
-    .in("status", ["booked"])
     .eq("preferred_date", date)
-    .is("scheduled_start", null);
+    .not("status", "in", `(${INACTIVE_BOOKING_STATUSES.join(",")})`);
 
-  if (veterinarianId) q2 = q2.eq("assigned_veterinarian_id", veterinarianId);
-
-  const [{ data: bookedByStart, error: err1 }, { data: bookedByDate, error: err2 }] =
-    await Promise.all([q1, q2]);
-
-  if (err1) throw err1;
-  if (err2) throw err2;
-
-  // Filter q1 results to only those actually on the target local date using preferred_date
-  // (since some appointments may span midnight UTC but belong to a different local date)
-  const bookedOnDate = (bookedByStart || []).filter((a) => a.preferred_date === date);
-  const bookedAppts = [...bookedOnDate, ...(bookedByDate || [])];
+  if (bookedError) throw bookedError;
 
   // 4. Build slots from schedules, marking capacity
   const slots = schedules.map((schedule) => {
@@ -713,32 +705,11 @@ export async function getAvailableSlots(
     const [startH, startM] = schedule.start_time.split(":").map(Number);
     const [endH, endM]     = schedule.end_time.split(":").map(Number);
 
-    // Build slot boundaries using LOCAL time strings — this matches how scheduled_start
-    // was created (new Date(date).setHours(h, m, 0, 0) uses local time).
-    const slotStart = new Date(`${date}T${String(startH).padStart(2,"0")}:${String(startM).padStart(2,"0")}:00`);
-    const slotEnd   = new Date(`${date}T${String(endH).padStart(2,"0")}:${String(endM).padStart(2,"0")}:00`);
-
-    // Count how many appointments overlap this slot
-    const booked = bookedAppts.filter((appt) => {
-      if (appt.scheduled_start && appt.scheduled_end) {
-        // Use UTC timestamp comparison — both sides are now consistent (local time → UTC)
-        const apptStart = new Date(appt.scheduled_start);
-        const apptEnd   = new Date(appt.scheduled_end);
-        // Standard half-open interval overlap: [apptStart, apptEnd) overlaps [slotStart, slotEnd)
-        return apptStart < slotEnd && apptEnd > slotStart;
-      }
-      // Legacy: match by preferred_time hour against slot hour range
-      if (appt.preferred_time) {
-        const [ph] = appt.preferred_time.split(":").map(Number);
-        return ph >= startH && ph < endH;
-      }
-      // No time info — count against this slot
-      return true;
-    });
+    const booked = (bookedAppts || []).filter((appt) => isInSlotHours(appt.preferred_time, startH, endH));
 
     const currentBookings = booked.length;
     const available       = schedule.max_capacity - currentBookings;
-    const isAvailable     = available > 0;
+    const isAvailable     = !schedule.is_closed && available > 0;
 
     // Format time for display (HH:MM AM/PM)
     const formatTime = (h: number, m: number) => {
@@ -759,61 +730,27 @@ export async function getAvailableSlots(
     };
   });
 
-  return { slots, scheduled: bookedAppts };
+  return { slots, scheduled: bookedAppts || [] };
 }
 
 async function cancelAppointmentsForSchedule(schedule: Record<string, unknown>) {
   if (!schedule.specific_date) return;
   const supabase = await createClient();
-  
+
   const date = String(schedule.specific_date);
-  const [yr, mo, dy] = date.split("-").map(Number);
-  const windowStart = new Date(Date.UTC(yr, mo - 1, dy - 1, 0, 0, 0, 0));
-  const windowEnd   = new Date(Date.UTC(yr, mo - 1, dy + 1, 23, 59, 59, 999));
-
-  const q1 = supabase
+  const { data: bookedAppts } = await supabase
     .from("appointments")
-    .select("id, scheduled_start, scheduled_end, preferred_date, preferred_time")
-    .in("status", ["booked"])
-    .gte("scheduled_start", windowStart.toISOString())
-    .lte("scheduled_start", windowEnd.toISOString());
+    .select("id, preferred_time")
+    .eq("status", "booked")
+    .eq("preferred_date", date);
 
-  const q2 = supabase
-    .from("appointments")
-    .select("id, scheduled_start, scheduled_end, preferred_date, preferred_time")
-    .in("status", ["booked"])
-    .eq("preferred_date", date)
-    .is("scheduled_start", null);
+  const [startH] = String(schedule.start_time).split(":").map(Number);
+  const [endH]   = String(schedule.end_time).split(":").map(Number);
 
-  const [{ data: bookedByStart }, { data: bookedByDate }] = await Promise.all([q1, q2]);
-  
-  const bookedOnDate = (bookedByStart || []).filter((a) => a.preferred_date === date);
-  const bookedAppts = [...bookedOnDate, ...(bookedByDate || [])];
-
-  const [startH, startM] = String(schedule.start_time).split(":").map(Number);
-  const [endH, endM]     = String(schedule.end_time).split(":").map(Number);
-  const slotStart = new Date(`${date}T${String(startH).padStart(2,"0")}:${String(startM).padStart(2,"0")}:00`);
-  const slotEnd   = new Date(`${date}T${String(endH).padStart(2,"0")}:${String(endM).padStart(2,"0")}:00`);
-
-  const toCancelIds: string[] = [];
-
-  for (const appt of bookedAppts) {
-    let overlap = false;
-    if (appt.scheduled_start && appt.scheduled_end) {
-      const apptStart = new Date(appt.scheduled_start);
-      const apptEnd   = new Date(appt.scheduled_end);
-      if (apptStart < slotEnd && apptEnd > slotStart) overlap = true;
-    } else if (appt.preferred_time) {
-      const [ph] = appt.preferred_time.split(":").map(Number);
-      if (ph >= startH && ph < endH) overlap = true;
-    } else {
-      overlap = true; // default to overlap if we don't know time
-    }
-
-    if (overlap) {
-      toCancelIds.push(appt.id);
-    }
-  }
+  // Same clinic-local slot matching as getAvailableSlots / book_appointment.
+  const toCancelIds = (bookedAppts || [])
+    .filter((appt) => isInSlotHours(appt.preferred_time, startH, endH))
+    .map((appt) => appt.id);
 
   if (toCancelIds.length > 0) {
     await supabase

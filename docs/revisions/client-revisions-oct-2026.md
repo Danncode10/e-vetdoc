@@ -194,10 +194,10 @@ Every stage ends with its own automated tests, lint, and a commit. Tests live in
 - [x] **Tests** `tests/14-role-badge.spec.ts`: badge visible for every role on desktop and mobile widths
 
 ### Stage 6 — Booking limit fix (#6)
-- [ ] Migration `book_appointment_with_capacity` (atomic, locked capacity check)
-- [ ] Slot counting uses clinic-local date/time (fixes the UTC bug)
-- [ ] Booking form uses the new booking function; full slots show as unavailable
-- [ ] **Tests** `tests/15-booking-capacity.spec.ts`: capacity 2 + 3 simultaneous bookings → exactly 2 succeed; full slot shown as fully booked; server running in UTC still enforces the limit
+- [x] Migration `book_appointment_with_capacity` (atomic, locked capacity check)
+- [x] Slot counting uses clinic-local date/time (fixes the UTC bug)
+- [x] Booking form uses the new booking function; full slots show as unavailable
+- [x] **Tests** `tests/15-booking-capacity.spec.ts`: capacity 2 + 3 simultaneous bookings → exactly 2 succeed; full slot shown as fully booked; server running in UTC still enforces the limit
 
 ### Stage 7 — Cancel options per role (#7)
 - [ ] Vet: no cancel action. Admin/Staff: clinic reasons. Owner: owner reasons
