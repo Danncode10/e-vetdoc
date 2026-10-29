@@ -178,14 +178,13 @@ Every stage ends with its own automated tests, lint, and a commit. Tests live in
 - [x] **Tests** `tests/11-role-permissions.spec.ts`: sidebar tabs per role; Staff blocked from Team; Vet has no appointment management
 
 ### Stage 3 — Registration with role + captcha (#2)
-- [ ] "Register as" selector (Admin, Staff, Veterinarian, Owner) on sign-up
-- [ ] Turnstile widget + server-side verification
-- [ ] Google sign-ups pick their role on the account-status page
-- [ ] **Tests** `tests/12-registration.spec.ts`: role options shown, captcha rendered, sign-up creates a pending account with the requested role
+- [x] "Register as" selector (Admin, Staff, Veterinarian, Owner) on sign-up
+- [x] Turnstile widget + server-side verification
+- [x] **Tests** `tests/12-registration.spec.ts`: role options shown, captcha rendered, sign-up creates a pending account with the requested role
 
 ### Stage 4 — Login gate + Approve / Disapprove (#3)
 - [ ] Pending / disapproved / deactivated accounts can't log in (clear message), and the redirect loop for inactive users is fixed
-- [ ] `/account-status` page for signed-in users who aren't approved yet
+- [ ] `/account-status` page for signed-in users who aren't approved yet (Google sign-ups pick their role here)
 - [ ] **Approvals** tab for Admin + Staff with Approve / Disapprove + role override, audit-logged
 - [ ] Approval email
 - [ ] **Tests** `tests/13-approvals.spec.ts`: pending user blocked → Admin approves → user logs in; Disapprove blocks; Staff can't approve an Admin request
