@@ -122,8 +122,8 @@ export function DashboardShell({ user, profile, children }: DashboardShellProps)
   const handleSignOut = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
+    // Full page load so no cached signed-in route can bounce the user back to /dashboard.
+    window.location.assign("/login");
   };
 
   const mainTabs = enabledTabs.filter((t) => t.id !== "settings");

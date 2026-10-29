@@ -12,6 +12,8 @@ export async function runAdminScheduleFlow(page: Page) {
   await expect(page.locator('text=Welcome back!').or(page.locator('text=Login successful!'))).toBeVisible({ timeout: 15000 });
   
   await page.goto('/dashboard/schedules/new');
+  // Wait for hydration so the form keeps the values typed below (first compile is slow).
+  await page.waitForLoadState('networkidle');
   
   const futureDate = new Date();
   futureDate.setDate(futureDate.getDate() + 2);
@@ -72,8 +74,16 @@ export async function runOwnerBookingFlow(page: Page) {
   const futureDate = new Date();
   futureDate.setDate(futureDate.getDate() + 2);
 
+  // The target date can fall in next month (e.g. near the end of a month).
+  if (futureDate.getMonth() !== new Date().getMonth()) {
+    await page.getByRole('button', { name: 'Next month' }).click();
+  }
   await page.waitForSelector('button[title*="Available:"]', { timeout: 10000 });
-  await page.locator('button[title*="Available:"]').filter({ hasText: futureDate.getDate().toString() }).first().click();
+  await page
+    .locator('button[title*="Available:"]')
+    .filter({ has: page.locator('span', { hasText: new RegExp(`^${futureDate.getDate()}$`) }) })
+    .first()
+    .click();
   await page.locator('#step-1-next-btn').click();
   
   await page.locator('button:not([disabled])').filter({ hasText: '9:00 AM' }).first().click();
@@ -82,5 +92,5 @@ export async function runOwnerBookingFlow(page: Page) {
   await page.locator('#appt-reason').fill('Checkup test');
   await page.locator('#submit-appt-btn').click();
   
-  await expect(page.locator('text=Appointment request submitted!')).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('text=Appointment booked!')).toBeVisible({ timeout: 15000 });
 }

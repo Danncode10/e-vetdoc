@@ -204,9 +204,17 @@ Every stage ends with its own automated tests, lint, and a commit. Tests live in
 - [x] **Tests** `tests/16-cancel-options.spec.ts`
 
 ### Stage 8 — Final QA + PR
-- [ ] `pnpm lint` + `pnpm build` clean
-- [ ] All new specs + existing booking/clinical flows pass
+- [x] `pnpm build` passes; `pnpm lint` adds no new problems (the repo already had 354 lint findings on `main`; this branch has 353)
+- [x] All new specs + existing booking/clinical flows pass (44/44, also with the server on UTC like Vercel)
 - [ ] Push to fork, open PR to `Vinz-ops/e-vetdoc:main`
+
+---
+
+## Extra fixes found during QA
+
+- **Sign out sometimes bounced back to the dashboard.** A cached signed-in route could redirect `/login` → `/dashboard` right after sign-out. Sign-out now does a full page load to `/login`.
+- **Deactivated accounts looped between `/login` and `/dashboard`.** They now land on `/account-status`.
+- **Existing E2E booking flow** (`tests/flows/booking.ts`) failed near the end of a month (it never moved the calendar to next month), matched the wrong day number (`1` also matched `10`, `21`…), and could type into the schedule form before it was interactive. All three fixed; it also now expects the new "Appointment booked!" message.
 
 ---
 
@@ -214,7 +222,7 @@ Every stage ends with its own automated tests, lint, and a commit. Tests live in
 
 These can't be done from the PR alone and must be done on Vinz's side:
 
-- [ ] Apply the new migrations to the production Supabase project (`supabase db push`).
+- [ ] Apply the new migrations to the production Supabase project: `supabase link --project-ref <prod-ref>` then `supabase db push` (adds `20261030100000`, `20261030100100`, `20261030100200`).
 - [ ] Create a Cloudflare Turnstile site and add the **site key** to Vercel env (`NEXT_PUBLIC_TURNSTILE_SITE_KEY`).
 - [ ] In production Supabase → Auth → Bot & Abuse Protection: enable captcha (Turnstile) with the **secret key**.
 - [ ] Redeploy on Vercel (`e-vetdoc-five.vercel.app`).
