@@ -190,8 +190,8 @@ Every stage ends with its own automated tests, lint, and a commit. Tests live in
 - [x] **Tests** `tests/13-approvals.spec.ts`: pending user blocked → Admin approves → user logs in; Disapprove blocks; Staff can't approve an Admin request
 
 ### Stage 5 — Role badge in sidebar (#5)
-- [ ] Role badge on the sidebar profile button + mobile top bar
-- [ ] **Tests** `tests/14-role-badge.spec.ts`: badge visible for every role on desktop and mobile widths
+- [x] Role badge on the sidebar profile button + mobile top bar
+- [x] **Tests** `tests/14-role-badge.spec.ts`: badge visible for every role on desktop and mobile widths
 
 ### Stage 6 — Booking limit fix (#6)
 - [ ] Migration `book_appointment_with_capacity` (atomic, locked capacity check)

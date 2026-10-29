@@ -27,6 +27,7 @@ import { siteConfig } from "@/lib/config";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 import { getEnabledTabs, isFeatureEnabled, type DashboardTabId } from "@/lib/dashboard-features";
+import { roleLabel } from "@/lib/roles";
 import { OverviewTab } from "@/components/dashboard/tabs/overview-tab";
 import { PetsTab } from "@/components/dashboard/tabs/pets-tab";
 import { OwnersTab } from "@/components/dashboard/tabs/owners-tab";
@@ -49,6 +50,19 @@ const ICONS: Record<DashboardTabId | "schedules", LucideIcon> = {
   logs: ScrollText,
   settings: Settings,
 };
+
+/** Always-visible indicator of the signed-in user's role. */
+function RoleBadge({ label, testId }: { label: string; testId: string }) {
+  return (
+    <span
+      data-testid={testId}
+      className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary"
+    >
+      <ShieldCheck className="w-3 h-3" />
+      {label}
+    </span>
+  );
+}
 
 interface DashboardShellProps {
   user: SupabaseUser;
@@ -77,6 +91,7 @@ export function DashboardShell({ user, profile, children }: DashboardShellProps)
 
   const displayName = currentProfile.full_name || user.email?.split("@")[0] || "there";
   const initials = displayName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
+  const currentRoleLabel = roleLabel(userRole);
 
   React.useEffect(() => {
     if (userRole === "admin") {
@@ -232,8 +247,8 @@ export function DashboardShell({ user, profile, children }: DashboardShellProps)
                     <p className="text-[11px] text-muted-foreground truncate mt-0.5">{user.email}</p>
                     <div className="mt-2 flex items-center gap-1.5">
                       <ShieldCheck className="w-3.5 h-3.5 text-primary shrink-0" />
-                      <span className="text-[10px] font-medium text-primary capitalize">
-                        {currentProfile.role}
+                      <span className="text-[10px] font-medium text-primary">
+                        {currentRoleLabel}
                       </span>
                     </div>
                   </div>
@@ -258,7 +273,7 @@ export function DashboardShell({ user, profile, children }: DashboardShellProps)
             )}
             <button
               onClick={() => setUserMenuOpen(v => !v)}
-              title={collapsed ? displayName : undefined}
+              title={collapsed ? `${displayName} · ${currentRoleLabel}` : undefined}
               className={`w-full flex items-center gap-2.5 rounded-lg hover:bg-muted transition-colors
                 ${collapsed ? "md:justify-center px-0 py-2" : "px-3 py-2"}`}
             >
@@ -268,7 +283,10 @@ export function DashboardShell({ user, profile, children }: DashboardShellProps)
                 </AvatarFallback>
               </Avatar>
               <div className={`flex-1 min-w-0 text-left ${collapsed ? "md:hidden" : ""}`}>
-                <p className="text-[12px] font-semibold text-foreground truncate">{displayName}</p>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <p className="text-[12px] font-semibold text-foreground truncate">{displayName}</p>
+                  <RoleBadge label={currentRoleLabel} testId="sidebar-role-badge" />
+                </div>
                 <p className="text-[10px] text-muted-foreground truncate">{user.email}</p>
               </div>
             </button>
@@ -284,6 +302,9 @@ export function DashboardShell({ user, profile, children }: DashboardShellProps)
           </button>
           <span className="text-[14px] font-medium text-foreground hidden md:block">{activeLabel}</span>
           <div className="flex-1 md:hidden" />
+          <div className="md:hidden">
+            <RoleBadge label={currentRoleLabel} testId="header-role-badge" />
+          </div>
         </header>
 
         <main className="flex-1 overflow-y-auto p-6 md:p-8 print:p-0">
