@@ -7,30 +7,32 @@ import { Button } from "@/components/ui/button";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { addExistingStaff, setStaffActive, updateStaffRole, type StaffMember } from "@/services/staff";
 
-type StaffRole = "admin" | "veterinarian";
+type StaffRole = "admin" | "staff" | "veterinarian";
 type ManageableRole = StaffRole | "owner";
 
 const inputClass = "min-h-12 w-full rounded-xl border border-input bg-card px-3.5 text-sm text-foreground outline-none ring-ring transition-all focus-visible:ring-2 focus-visible:border-primary";
 
+const roleBadgeStyles: Record<StaffRole, string> = {
+  admin: "bg-blue-50 text-blue-900 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800",
+  staff: "bg-muted text-foreground border-border",
+  veterinarian: "bg-teal-50 text-teal-900 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800",
+};
+
 function RoleBadge({ role }: { role: StaffRole }) {
-  const isAdmin = role === "admin";
-  const Icon = isAdmin ? ShieldCheck : Stethoscope;
+  const Icon = role === "admin" ? ShieldCheck : role === "staff" ? UserCog : Stethoscope;
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold border ${
-        isAdmin
-          ? "bg-blue-50 text-blue-900 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800"
-          : "bg-teal-50 text-teal-900 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800"
-      }`}
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold border ${roleBadgeStyles[role]}`}
     >
       <Icon className="w-3.5 h-3.5 shrink-0 text-primary" />
-      {isAdmin ? "Administrator" : "Veterinarian"}
+      {roleLabel(role)}
     </span>
   );
 }
 
 function roleLabel(role: ManageableRole) {
   if (role === "admin") return "Administrator";
+  if (role === "staff") return "Staff";
   if (role === "veterinarian") return "Veterinarian";
   return "Pet owner";
 }
@@ -46,6 +48,7 @@ const roleOptions: Array<{
   Icon: typeof ShieldCheck;
 }> = [
   { value: "veterinarian", label: "Veterinarian", description: "Can access clinic staff tools and manage clinical records.", Icon: Stethoscope },
+  { value: "staff", label: "Staff", description: "Runs the front desk: approvals, appointments, schedules, and billing. Cannot manage the team.", Icon: UserCog },
   { value: "admin", label: "Administrator", description: "Can manage staff, access clinic settings, and oversee data.", Icon: ShieldCheck },
   { value: "owner", label: "Pet owner", description: "Removes clinic-staff access while keeping the personal account active.", Icon: UserRoundCheck },
 ];
@@ -156,6 +159,7 @@ export function StaffManagement({ staff }: { staff: StaffMember[] }) {
               onChange={(event) => setNewStaff({ ...newStaff, role: event.target.value as StaffRole })}
             >
               <option value="veterinarian">Veterinarian</option>
+              <option value="staff">Staff</option>
               <option value="admin">Administrator</option>
             </select>
           </label>
@@ -258,7 +262,7 @@ export function StaffManagement({ staff }: { staff: StaffMember[] }) {
                         <legend className="text-xs font-bold text-foreground uppercase tracking-wider mb-2">
                           Select New Role for {staffName(member)}
                         </legend>
-                        <div className="grid gap-2 sm:grid-cols-3">
+                        <div className="grid gap-2 sm:grid-cols-2">
                           {roleOptions.map(({ value, label, description, Icon }) => (
                             <label key={value} className="block cursor-pointer">
                               <input

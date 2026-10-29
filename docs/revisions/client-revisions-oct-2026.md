@@ -171,11 +171,11 @@ Every stage ends with its own automated tests, lint, and a commit. Tests live in
 - [x] **Tests** `tests/10-db-approval-rls.spec.ts`: new sign-ups are pending with least-privilege role, users can't self-approve, pending owners can't add pets, Staff can read clinic data but can't change roles
 
 ### Stage 2 — Staff role + permission matrix in the app (#1, #4)
-- [ ] Shared role helpers (`isAdminOrStaff`, `isClinicMember`) in `authorization.ts` and `dashboard-features.ts`
-- [ ] All pages/services/components that check roles updated for Staff
-- [ ] Team tab: Staff can be added and shown; Admin-only
-- [ ] Vets can't cancel/reschedule appointments (UI + service layer)
-- [ ] **Tests** `tests/11-role-permissions.spec.ts`: sidebar tabs per role; Staff blocked from Team; Vet has no appointment management
+- [x] Shared role helpers (`isAdminOrStaff`, `isClinicMember`) in `authorization.ts` and `dashboard-features.ts`
+- [x] All pages/services/components that check roles updated for Staff
+- [x] Team tab: Staff can be added and shown; Admin-only
+- [x] Vets can't cancel/reschedule appointments (UI + service layer)
+- [x] **Tests** `tests/11-role-permissions.spec.ts`: sidebar tabs per role; Staff blocked from Team; Vet has no appointment management
 
 ### Stage 3 — Registration with role + captcha (#2)
 - [ ] "Register as" selector (Admin, Staff, Veterinarian, Owner) on sign-up

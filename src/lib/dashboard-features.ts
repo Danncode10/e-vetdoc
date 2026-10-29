@@ -21,6 +21,7 @@ export type FeatureFlag =
   | "appointments"
   | "billing"
   | "staff-only"
+  | "admin-or-staff"
   | "admin-only"
   | "schedules";
 
@@ -38,9 +39,13 @@ export const TAB_CONFIG: TabConfig[] = [
   { id: "schedules", label: "Schedule", feature: "staff-only" },
   { id: "billing", label: "Billing", feature: "always" },
   { id: "team", label: "Team", feature: "admin-only" },
-  { id: "logs", label: "Logs", feature: "admin-only" },
+  { id: "logs", label: "Logs", feature: "admin-or-staff" },
   { id: "settings", label: "Settings", feature: "always" },
 ];
+
+function isClinicRole(role: UserRole) {
+  return role === "admin" || role === "staff" || role === "veterinarian";
+}
 
 /**
  * Check if a feature flag is enabled for a given role.
@@ -53,16 +58,18 @@ export function isFeatureEnabled(flag: FeatureFlag, role: UserRole | null): bool
   // Role-based feature access
   switch (flag) {
     case "pets":
-      // Owners can manage their own pets, staff can view all pets
-      return role === "owner" || role === "veterinarian" || role === "admin";
+      // Owners can manage their own pets, the clinic team can view all pets
+      return role === "owner" || isClinicRole(role);
     case "owners":
-      // Only staff can view the owners registry
-      return role === "veterinarian" || role === "admin";
+      // Only the clinic team can view the owners registry
+      return isClinicRole(role);
     case "appointments":
       // All authenticated users can access appointments (request/view)
-      return role === "owner" || role === "veterinarian" || role === "admin";
+      return role === "owner" || isClinicRole(role);
     case "staff-only":
-      return role === "veterinarian" || role === "admin";
+      return isClinicRole(role);
+    case "admin-or-staff":
+      return role === "admin" || role === "staff";
     case "admin-only":
       return role === "admin";
     default:

@@ -60,7 +60,7 @@ export async function requireAuth(): Promise<AuthenticatedUser> {
  * Require the user to have one of the specified roles.
  * Throws redirect to /dashboard if not authorized.
  */
-export async function requireRole(allowedRoles: UserRole[]) {
+export async function requireRole(allowedRoles: readonly UserRole[]) {
   const { user, profile } = await requireAuth();
 
   if (!profile || !profile.role || !allowedRoles.includes(profile.role)) {
@@ -93,11 +93,25 @@ export function isOwner(profile: Profile | null): boolean {
   return profile?.role === "owner";
 }
 
+/** Roles that run clinic operations (approvals, appointments, schedules, logs). */
+export const ADMIN_STAFF_ROLES = ["admin", "staff"] as const satisfies readonly UserRole[];
+
+/** Every clinic team role (clinical records, billing, owners registry). */
+export const CLINIC_ROLES = ["admin", "staff", "veterinarian"] as const satisfies readonly UserRole[];
+
 /**
- * Check if a profile has any staff role (admin or veterinarian).
+ * Check if a profile is Admin or Staff. Staff has the same access as Admin
+ * except clinic configuration (team management and the service catalog).
  */
-export function isStaff(profile: Profile | null): boolean {
-  return isAdmin(profile) || isVeterinarian(profile);
+export function isAdminOrStaff(profile: Pick<Profile, "role"> | null): boolean {
+  return profile?.role === "admin" || profile?.role === "staff";
+}
+
+/**
+ * Check if a profile belongs to the clinic team (admin, staff, or veterinarian).
+ */
+export function isStaff(profile: Pick<Profile, "role"> | null): boolean {
+  return isAdminOrStaff(profile) || profile?.role === "veterinarian";
 }
 
 /**

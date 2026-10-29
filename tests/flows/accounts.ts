@@ -94,8 +94,8 @@ export async function getProfile(id: string) {
 
 export async function loginThroughUi(page: Page, email: string, password: string) {
   await page.goto('/login');
-  const signInTab = page.getByRole('button', { name: 'Sign In', exact: true }).first();
-  if (await signInTab.isVisible().catch(() => false)) await signInTab.click();
+  // The dev server compiles pages on first visit, so allow a slow first paint.
+  await page.locator('#email').waitFor({ timeout: 60000 });
   await page.locator('#email').fill(email);
   await page.locator('#password').fill(password);
   await page.locator('button[type="submit"]').click();
@@ -103,6 +103,37 @@ export async function loginThroughUi(page: Page, email: string, password: string
 
 export async function loginAndOpenDashboard(page: Page, email: string, password: string) {
   await loginThroughUi(page, email, password);
-  await page.waitForURL('**/dashboard**', { timeout: 20000 });
-  await expect(page.getByText('Overview').first()).toBeVisible({ timeout: 20000 });
+  await page.waitForURL('**/dashboard**', { timeout: 60000 });
+  await expect(sidebarTab(page, 'Overview')).toBeVisible({ timeout: 60000 });
+}
+
+export function sidebarTab(page: Page, label: string) {
+  return page.locator('aside nav').getByRole('button', { name: label, exact: true });
+}
+
+/** Creates a pet owned by `ownerId` plus a booked appointment, using the service role. */
+export async function createBookedAppointment(ownerId: string, date = '2030-01-15') {
+  const db = serviceDb();
+  const { data: pet, error: petError } = await db
+    .from('pets')
+    .insert({ name: `E2E Pet ${Date.now()}`, species: 'dog' })
+    .select('id')
+    .single();
+  if (petError || !pet) throw petError;
+  await db.from('pet_owners').insert({ pet_id: pet.id, owner_profile_id: ownerId, relationship: 'owner', is_primary_contact: true });
+  const { data: appt, error } = await db
+    .from('appointments')
+    .insert({ pet_id: pet.id, owner_id: ownerId, status: 'booked', preferred_date: date, preferred_time: '09:00:00' })
+    .select('id')
+    .single();
+  if (error || !appt) throw error;
+  return { petId: pet.id, appointmentId: appt.id };
+}
+
+export async function deleteBookedAppointment(ids: { petId: string; appointmentId: string }) {
+  const db = serviceDb();
+  await db.from('appointment_status_history').delete().eq('appointment_id', ids.appointmentId);
+  await db.from('appointments').delete().eq('id', ids.appointmentId);
+  await db.from('pet_owners').delete().eq('pet_id', ids.petId);
+  await db.from('pets').delete().eq('id', ids.petId);
 }

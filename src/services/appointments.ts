@@ -2,7 +2,7 @@
 
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
-import { requireAuth } from "@/services/authorization";
+import { isAdminOrStaff, isStaff, requireAuth } from "@/services/authorization";
 import type {
   TablesInsert,
   TablesUpdate,
@@ -105,7 +105,18 @@ export async function createAppointment(input: AppointmentInsert) {
   return data;
 }
 
+const APPOINTMENT_MANAGEMENT_ERROR = "Only Admin or Staff can manage appointments.";
+
+// Appointment management (cancel, schedule, reschedule, no-show) belongs to the front
+// desk. Veterinarians work on encounters but do not manage bookings.
+async function requireAppointmentManager(options: { allowOwner?: boolean } = {}) {
+  const { profile } = await requireAuth();
+  if (isAdminOrStaff(profile) || (options.allowOwner && profile.role === "owner")) return profile;
+  throw new Error(APPOINTMENT_MANAGEMENT_ERROR);
+}
+
 export async function updateAppointment(id: string, updates: AppointmentUpdate) {
+  await requireAppointmentManager();
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("appointments")
@@ -119,6 +130,8 @@ export async function updateAppointment(id: string, updates: AppointmentUpdate) 
 }
 
 export async function cancelAppointment(id: string, reason?: string) {
+  // Owners may cancel their own bookings; RLS limits them to their own rows.
+  await requireAppointmentManager({ allowOwner: true });
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("appointments")
@@ -145,6 +158,7 @@ export async function scheduleAppointment(
     notes?: string;
   }
 ) {
+  await requireAppointmentManager();
   const supabase = await createClient();
 
   // Check for double-booking
@@ -188,6 +202,8 @@ export async function scheduleAppointment(
 }
 
 export async function completeAppointment(id: string, notes?: string) {
+  const { profile } = await requireAuth();
+  if (!isStaff(profile)) throw new Error("Only the clinic team can complete appointments.");
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("appointments")
@@ -206,6 +222,7 @@ export async function completeAppointment(id: string, notes?: string) {
 }
 
 export async function markNoShow(id: string) {
+  await requireAppointmentManager();
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("appointments")
@@ -231,6 +248,7 @@ export async function rescheduleAppointment(
     notes?: string;
   }
 ) {
+  await requireAppointmentManager();
   const supabase = await createClient();
 
   // Get current appointment including preferred_date and preferred_time

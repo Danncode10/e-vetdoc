@@ -138,7 +138,8 @@ export function AppointmentsTab({ role, userId }: { role: UserRole; userId: stri
     await loadAppointments();
   }
 
-  const canCancel = (status: string) => ["booked"].includes(status);
+  // Veterinarians do not manage bookings; only owners and the front desk can cancel.
+  const canCancel = (status: string) => role !== "veterinarian" && ["booked"].includes(status);
 
   // Filter appointments
   const filteredAppointments = React.useMemo(() => {

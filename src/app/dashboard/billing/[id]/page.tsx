@@ -1,4 +1,4 @@
-import { requireRole } from "@/services/authorization";
+import { requireRole, CLINIC_ROLES } from "@/services/authorization";
 import { getInvoiceById } from "@/services/billing";
 import { notFound } from "next/navigation";
 import { InvoiceDetail } from "@/components/dashboard/billing/invoice-detail";
@@ -8,7 +8,7 @@ export default async function InvoicePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireRole(["admin", "veterinarian"]);
+  await requireRole(CLINIC_ROLES);
   const { id } = await params;
 
   const invoice = await getInvoiceById(id);

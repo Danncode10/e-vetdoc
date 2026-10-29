@@ -2,7 +2,7 @@
 
 import { createClient } from "@/utils/supabase/server";
 import { Tables, TablesInsert, TablesUpdate } from "@/types/supabase";
-import { requireAuth } from "@/services/authorization";
+import { isAdminOrStaff, isStaff, requireAuth } from "@/services/authorization";
 import { revalidatePath } from "next/cache";
 
 export type Pet = Tables<"pets">;
@@ -70,8 +70,8 @@ function parseAge(value: string): number | null {
   return age;
 }
 
-function assertClinicStaff(role: string | null): void {
-  if (role !== "admin" && role !== "veterinarian") {
+function assertClinicStaff(role: Tables<"profiles">["role"]): void {
+  if (!isStaff({ role })) {
     throw new Error("Only clinic staff can view registry records.");
   }
 }
@@ -216,7 +216,7 @@ export async function createOwnedPet(input: PetFormInput) {
 
 export async function updateOwnedPet(id: string, input: PetFormInput) {
   const { profile } = await requireAuth();
-  if (profile.role !== "owner" && profile.role !== "admin") throw new Error("You do not have permission to update pet details.");
+  if (profile.role !== "owner" && !isAdminOrStaff(profile)) throw new Error("You do not have permission to update pet details.");
   const payload = toPetPayload(input);
   const supabase = await createClient();
   const { data, error } = await supabase.from("pets").update(payload).eq("id", id).select().single();

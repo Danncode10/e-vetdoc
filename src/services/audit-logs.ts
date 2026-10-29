@@ -3,7 +3,7 @@
 import "server-only";
 
 import { createClient, createAdminClient } from "@/utils/supabase/server";
-import { requireRole } from "@/services/authorization";
+import { requireRole, ADMIN_STAFF_ROLES } from "@/services/authorization";
 
 export type LogCategory = "all" | "appointment" | "clinical" | "billing" | "staff";
 
@@ -42,7 +42,7 @@ export interface ActivityLogFilters {
 export async function getClinicActivityLogs(
   filters: ActivityLogFilters = {}
 ): Promise<ClinicActivityLog[]> {
-  await requireRole(["admin"]);
+  await requireRole(ADMIN_STAFF_ROLES);
 
   const adminClient = createAdminClient();
   const limit = filters.limit ?? 250;
