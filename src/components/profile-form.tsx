@@ -9,18 +9,13 @@ import { Button } from "@/components/ui/button";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { Database } from "@/types/supabase";
+import { roleLabel } from "@/lib/roles";
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 
 // Reusable input class — semantic tokens only, consistent height
 const inputClass =
   "w-full bg-secondary border border-border rounded-2xl py-4 pl-12 pr-5 text-sm font-semibold text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20 transition-all";
-
-const ROLE_LABELS: Record<string, string> = {
-  admin: "Admin",
-  veterinarian: "Veterinarian",
-  owner: "Owner",
-};
 
 export function ProfileForm({
   profile,
@@ -86,7 +81,7 @@ export function ProfileForm({
           variant={profile.role === "admin" ? "default" : "secondary"}
           className="self-start sm:self-auto uppercase tracking-widest px-3 py-1 text-[10px] font-black shrink-0"
         >
-          {profile.role ? (ROLE_LABELS[profile.role] || profile.role) : "Owner"}
+          {roleLabel(profile.role ?? "owner")}
         </Badge>
       </div>
 

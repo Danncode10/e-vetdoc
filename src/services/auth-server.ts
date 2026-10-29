@@ -5,6 +5,7 @@ import { verifyRateLimit } from '@/lib/ratelimit';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { verifyCaptcha } from '@/services/captcha';
 import { isUserRole } from '@/lib/roles';
+import { ACCOUNT_STATE_MESSAGES, getAccountState } from '@/lib/account-status';
 
 const MIN_PASSWORD_SCORE = 3;
 
@@ -28,6 +29,17 @@ export async function signInWithEmailRateLimited(email: string, password: string
   });
 
   if (signInError) return { error: signInError.message };
+
+  // Accounts must be approved by the clinic before they can sign in.
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: profile } = user
+    ? await supabase.from('profiles').select('approval_status, is_active').eq('id', user.id).single()
+    : { data: null };
+  const accountState = profile ? getAccountState(profile) : 'pending';
+  if (accountState !== 'approved') {
+    await supabase.auth.signOut();
+    return { error: ACCOUNT_STATE_MESSAGES[accountState].message, accountState };
+  }
 
   const { data: mfaData, error: mfaError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
   if (mfaError) return { error: mfaError.message };

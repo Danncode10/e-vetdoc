@@ -183,11 +183,11 @@ Every stage ends with its own automated tests, lint, and a commit. Tests live in
 - [x] **Tests** `tests/12-registration.spec.ts`: role options shown, captcha rendered, sign-up creates a pending account with the requested role
 
 ### Stage 4 — Login gate + Approve / Disapprove (#3)
-- [ ] Pending / disapproved / deactivated accounts can't log in (clear message), and the redirect loop for inactive users is fixed
-- [ ] `/account-status` page for signed-in users who aren't approved yet (Google sign-ups pick their role here)
-- [ ] **Approvals** tab for Admin + Staff with Approve / Disapprove + role override, audit-logged
-- [ ] Approval email
-- [ ] **Tests** `tests/13-approvals.spec.ts`: pending user blocked → Admin approves → user logs in; Disapprove blocks; Staff can't approve an Admin request
+- [x] Pending / disapproved / deactivated accounts can't log in (clear message), and the redirect loop for inactive users is fixed
+- [x] `/account-status` page for signed-in users who aren't approved yet (Google sign-ups pick their role here)
+- [x] **Approvals** tab for Admin + Staff with Approve / Disapprove + role override, audit-logged
+- [x] Approval email
+- [x] **Tests** `tests/13-approvals.spec.ts`: pending user blocked → Admin approves → user logs in; Disapprove blocks; Staff can't approve an Admin request
 
 ### Stage 5 — Role badge in sidebar (#5)
 - [ ] Role badge on the sidebar profile button + mobile top bar

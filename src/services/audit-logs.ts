@@ -304,11 +304,16 @@ export async function getClinicActivityLogs(
         id: `staff-${sl.id}`,
         category: "staff",
         action: sl.action.replace(/_/g, " ").toUpperCase(),
-        description: `${actorName} modified staff profile for ${targetName}.`,
+        description:
+          sl.action === "registration_approved"
+            ? `${actorName} approved the registration of ${targetName}.`
+            : sl.action === "registration_rejected"
+              ? `${actorName} disapproved the registration of ${targetName}.`
+              : `${actorName} modified staff profile for ${targetName}.`,
         actor: {
           id: sl.actor_id,
           name: actorName,
-          role: "admin",
+          role: (sl.actor as { role?: string } | null)?.role ?? "admin",
           email: (sl.actor as any)?.email ?? null,
         },
         target: {

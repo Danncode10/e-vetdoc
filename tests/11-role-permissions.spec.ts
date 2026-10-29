@@ -12,11 +12,11 @@ import {
 // Stage 2 — Staff role and the permission matrix in the app (#1, #4).
 test.describe.configure({ timeout: 120000 });
 
-const ALL_TABS = ['Overview', 'Pets', 'Owners', 'Appointments', 'Schedule', 'Billing', 'Team', 'Logs'];
+const ALL_TABS = ['Overview', 'Pets', 'Owners', 'Appointments', 'Schedule', 'Billing', 'Approvals', 'Team', 'Logs'];
 
 const expectedTabs: Record<keyof typeof accounts, string[]> = {
-  admin: ['Overview', 'Pets', 'Owners', 'Appointments', 'Schedule', 'Billing', 'Team', 'Logs'],
-  staff: ['Overview', 'Pets', 'Owners', 'Appointments', 'Schedule', 'Billing', 'Logs'],
+  admin: ['Overview', 'Pets', 'Owners', 'Appointments', 'Schedule', 'Billing', 'Approvals', 'Team', 'Logs'],
+  staff: ['Overview', 'Pets', 'Owners', 'Appointments', 'Schedule', 'Billing', 'Approvals', 'Logs'],
   vet: ['Overview', 'Pets', 'Owners', 'Appointments', 'Schedule', 'Billing'],
   owner: ['Overview', 'Pets', 'Appointments', 'Billing'],
 };

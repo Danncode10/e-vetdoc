@@ -7,7 +7,7 @@ import { createServerClient } from '@supabase/ssr'
  */
 
 const PUBLIC_PATHS = ['/login', '/forgot-password', '/reset-password', '/auth/callback'];
-const PROTECTED_PATHS = ['/dashboard', '/onboarding'];
+const PROTECTED_PATHS = ['/dashboard', '/onboarding', '/account-status'];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some(path => pathname === path || pathname.startsWith(path + '/'));
