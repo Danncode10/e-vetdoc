@@ -1,9 +1,9 @@
-import { requireRole, CLINIC_ROLES } from "@/services/authorization";
+import { requireRole, ADMIN_STAFF_ROLES } from "@/services/authorization";
 import { listInvoices } from "@/services/billing";
 import { InvoiceList } from "@/components/dashboard/billing/invoice-list";
 
 export default async function BillingPage() {
-  await requireRole(CLINIC_ROLES);
+  await requireRole(ADMIN_STAFF_ROLES);
   const invoices = await listInvoices({ limit: 100 });
 
   return (

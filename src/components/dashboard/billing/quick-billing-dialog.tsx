@@ -9,8 +9,6 @@ import { quickBillAppointment } from "@/services/billing";
 
 interface QuickBillingDialogProps {
   appointmentId: string;
-  ownerId: string;
-  encounterId?: string;
   /** Pre-fill from the appointment's service (e.g. "General Checkup") */
   serviceDescription?: string;
   /** Pre-fill price hint from the service (e.g. price_from) */
@@ -32,8 +30,6 @@ const VAT_RATE = 0.12;
 
 export function QuickBillingDialog({
   appointmentId,
-  ownerId,
-  encounterId,
   serviceDescription = "",
   suggestedAmount = 0,
   open,
@@ -75,8 +71,6 @@ export function QuickBillingDialog({
       try {
         const result = await quickBillAppointment({
           appointmentId,
-          ownerId,
-          encounterId,
           serviceDescription: description,
           amount: base,
           isVatable,

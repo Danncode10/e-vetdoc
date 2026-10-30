@@ -2,7 +2,7 @@
 
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
-import { requireAuth, requireRole, CLINIC_ROLES } from "@/services/authorization";
+import { requireAuth, requireRole, ADMIN_STAFF_ROLES } from "@/services/authorization";
 import type { Tables, TablesInsert } from "@/types/supabase";
 import { sendInvoiceCreatedEmail, sendInvoicePaidEmail } from "./email";
 
@@ -19,8 +19,9 @@ export type InvoiceWithDetails = Invoice & {
 const VAT_RATE = 0.12;
 
 // --- Staff guard ---
+// Billing belongs to the front desk: Admin and Staff (vets do medical work only).
 async function requireStaff() {
-  const { profile } = await requireRole(CLINIC_ROLES);
+  const { profile } = await requireRole(ADMIN_STAFF_ROLES);
   return profile;
 }
 
@@ -311,100 +312,44 @@ export async function voidInvoice(invoiceId: string): Promise<void> {
 }
 
 /**
- * Quick-bill an appointment in one action:
- *  1. Create a draft invoice linked to the appointment
- *  2. Add the consultation line item
- *  3. Finalize the invoice (→ unpaid)
- *  4. Record the payment (→ paid)
- *  5. Flip appointment status to "paid"
- *
- * Returns the created invoice ID for navigation.
+ * Quick-bill an appointment in one action ("Charge & Mark Paid"): invoice + line item +
+ * full payment, invoice and appointment marked Paid. Returns the invoice ID and receipt number.
  */
 export async function quickBillAppointment(input: {
   appointmentId: string;
-  ownerId: string;
-  encounterId?: string;
   serviceDescription: string;
   amount: number;
   isVatable: boolean;
   method: "cash" | "gcash" | "card" | "bank_transfer";
   referenceNumber?: string;
 }): Promise<{ invoiceId: string; receiptNumber: string }> {
-  const staff = await requireStaff();
+  await requireStaff();
   const supabase = await createClient();
 
   if (input.amount <= 0) throw new Error("Amount must be greater than 0.");
   if (!input.serviceDescription.trim()) throw new Error("Service description is required.");
 
-  // 1. Create invoice
-  const { data: invoice, error: invErr } = await supabase
-    .from("invoices")
-    .insert({
-      owner_id: input.ownerId,
-      encounter_id: input.encounterId ?? null,
-      status: "draft",
-    })
-    .select()
-    .single();
-  if (invErr) throw invErr;
-
-  // 2. Add line item
-  const { error: itemErr } = await supabase.from("invoice_items").insert({
-    invoice_id: invoice.id,
-    description: input.serviceDescription.trim(),
-    quantity: 1,
-    unit_price: input.amount,
-    is_vatable: input.isVatable,
+  // One database transaction: invoice, line item, payment, Paid statuses. It refuses an
+  // appointment that is already paid or not yet signed, so it cannot double-bill.
+  const { data, error } = await supabase.rpc("quick_bill_appointment", {
+    p_appointment_id: input.appointmentId,
+    p_description: input.serviceDescription.trim(),
+    p_amount: input.amount,
+    p_is_vatable: input.isVatable,
+    p_method: input.method,
+    p_reference: input.referenceNumber ?? undefined,
   });
-  if (itemErr) throw itemErr;
+  if (error) throw new Error(error.message);
+  const result = (data as Array<{ invoice_id: string; receipt_number: string }> | null)?.[0];
+  if (!result) throw new Error("The payment could not be recorded.");
 
-  // 3. Compute and persist totals
-  const vatAmount = input.isVatable ? input.amount * VAT_RATE : 0;
-  const vatableSales = input.isVatable ? input.amount : 0;
-  const vatExemptSales = input.isVatable ? 0 : input.amount;
-  const totalAmount = input.amount + vatAmount;
-
-  await supabase.from("invoices").update({
-    vatable_sales: vatableSales.toFixed(2),
-    vat_exempt_sales: vatExemptSales.toFixed(2),
-    vat_amount: vatAmount.toFixed(2),
-    total_amount: totalAmount.toFixed(2),
-    status: "unpaid",
-  }).eq("id", invoice.id);
-
-  // 4. Record payment
-  const { data: payment, error: payErr } = await supabase
-    .from("payments")
-    .insert({
-      invoice_id: invoice.id,
-      amount_paid: totalAmount,
-      method: input.method,
-      reference_number: input.referenceNumber ?? null,
-      recorded_by: staff.id,
-    })
-    .select("receipt_number")
-    .single();
-  if (payErr) throw payErr;
-
-  // 5. Mark invoice as paid
-  await supabase.from("invoices").update({ status: "paid" }).eq("id", invoice.id);
-
-  // 6. Update appointment status to "paid"
-  await supabase
-    .from("appointments")
-    .update({ status: "paid", updated_at: new Date().toISOString() })
-    .eq("id", input.appointmentId);
-
-  // Send transactional email
-  await sendInvoicePaidEmail(invoice.id);
+  // Email failures are logged inside and never undo the payment.
+  await sendInvoicePaidEmail(result.invoice_id);
 
   revalidatePath(`/dashboard/appointments/${input.appointmentId}`);
   revalidatePath("/dashboard/billing");
 
-  return {
-    invoiceId: invoice.id,
-    receiptNumber: payment.receipt_number ?? "",
-  };
+  return { invoiceId: result.invoice_id, receiptNumber: result.receipt_number ?? "" };
 }
 
 /**

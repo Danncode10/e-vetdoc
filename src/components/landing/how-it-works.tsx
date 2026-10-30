@@ -8,10 +8,10 @@ const STEPS = [
   {
     step: "01",
     icon: CalendarDays,
-    title: "Request a visit",
+    title: "Book a visit",
     description:
-      "Owners select a linked pet and request the care they need, while staff keep every detail organized.",
-    snippet: "appointment requested",
+      "Owners pick a pet, a service and an open slot; the visit is confirmed instantly while the clinic keeps every detail organized.",
+    snippet: "appointment booked",
     // Paint-only radial gradient (no filter:blur cost during scroll)
     glow: "radial-gradient(ellipse at 70% 50%, rgba(124,92,255,0.25), transparent 60%)",
   },

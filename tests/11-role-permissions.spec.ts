@@ -17,7 +17,7 @@ const ALL_TABS = ['Overview', 'Pets', 'Owners', 'Appointments', 'Schedule', 'Bil
 const expectedTabs: Record<keyof typeof accounts, string[]> = {
   admin: ['Overview', 'Pets', 'Owners', 'Appointments', 'Schedule', 'Billing', 'Approvals', 'Team', 'Logs'],
   staff: ['Overview', 'Pets', 'Owners', 'Appointments', 'Schedule', 'Billing', 'Approvals', 'Logs'],
-  vet: ['Overview', 'Pets', 'Owners', 'Appointments', 'Schedule', 'Billing'],
+  vet: ['Overview', 'Pets', 'Owners', 'Appointments', 'Schedule'],
   owner: ['Overview', 'Pets', 'Appointments', 'Billing'],
 };
 

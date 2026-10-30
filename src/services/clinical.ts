@@ -4,6 +4,7 @@ import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
 import { requireAuth, requireRole, CLINIC_ROLES } from "@/services/authorization";
 import type { Tables, TablesInsert, TablesUpdate } from "@/types/supabase";
+import { fillClinicNames } from "@/services/clinic-names";
 
 export type Encounter = Tables<"encounters">;
 export type EncounterInsert = TablesInsert<"encounters">;
@@ -33,22 +34,40 @@ async function requireStaff() {
 }
 
 /**
- * Create a new draft encounter.
+ * Open the encounter for an appointment: returns the existing one, or creates it when the
+ * appointment is still booked. Cancelled, no-show and finished visits cannot get a new encounter.
  */
-export async function createEncounter(input: Omit<EncounterInsert, "status" | "signed_at">) {
-  await requireStaff();
+export async function startEncounterForAppointment(appointmentId: string) {
+  const profile = await requireStaff();
   const supabase = await createClient();
+
+  const existing = await getEncounterByAppointmentId(appointmentId);
+  if (existing) return existing;
+
+  const { data: appointment, error: appointmentError } = await supabase
+    .from("appointments")
+    .select("id, pet_id, status")
+    .eq("id", appointmentId)
+    .single();
+  if (appointmentError) throw appointmentError;
+  if (appointment.status !== "booked") {
+    throw new Error("An encounter can only be started for a booked appointment.");
+  }
 
   const { data, error } = await supabase
     .from("encounters")
-    .insert({
-      ...input,
-      status: "draft",
-    })
-    .select()
+    .insert({ appointment_id: appointment.id, pet_id: appointment.pet_id, veterinarian_id: profile.id, status: "draft" })
+    .select("id, status")
     .single();
 
-  if (error) throw error;
+  if (error) {
+    // Someone else started it at the same moment (one encounter per appointment).
+    if (error.code === "23505") {
+      const raced = await getEncounterByAppointmentId(appointmentId);
+      if (raced) return raced;
+    }
+    throw error;
+  }
 
   revalidatePath("/dashboard");
   return data;
@@ -121,10 +140,13 @@ export async function signEncounter(id: string) {
   if (error) throw error;
 
   if (current.appointment_id) {
-    await supabase
+    // Only a booked visit becomes Diagnosed; a cancelled one stays cancelled.
+    const { error: appointmentError } = await supabase
       .from("appointments")
       .update({ status: "diagnosed" })
-      .eq("id", current.appointment_id);
+      .eq("id", current.appointment_id)
+      .eq("status", "booked");
+    if (appointmentError) throw appointmentError;
   }
 
   revalidatePath("/dashboard");
@@ -172,7 +194,7 @@ export async function listEncounters(filters?: {
 
   const { data, error } = await query;
   if (error) throw error;
-  return data;
+  return fillClinicNames(data, "veterinarian_id", "veterinarian");
 }
 
 /**
@@ -229,13 +251,14 @@ export async function getEncounterDetails(id: string) {
   if (prescriptionsRes.error) throw prescriptionsRes.error;
   if (amendmentsRes.error) throw amendmentsRes.error;
 
+  const [encounterWithVet] = await fillClinicNames([encounter], "veterinarian_id", "veterinarian");
   return {
-    encounter,
+    encounter: encounterWithVet,
     notes: notesRes.data[0] || null, // clinical_notes is 1:1 in practice
     diagnoses: diagnosesRes.data,
     treatments: treatmentsRes.data,
     prescriptions: prescriptionsRes.data,
-    amendments: amendmentsRes.data,
+    amendments: await fillClinicNames(amendmentsRes.data, "veterinarian_id", "veterinarian"),
   };
 }
 
@@ -522,13 +545,18 @@ export async function getPetClinicalHistory(petId: string) {
     `).in("encounter_id", encounterIds).order("created_at", { ascending: true }),
   ]);
 
-  return encounters.map((enc) => ({
+  const [encountersWithVets, amendments] = await Promise.all([
+    fillClinicNames(encounters, "veterinarian_id", "veterinarian"),
+    fillClinicNames(amendmentsRes.data ?? [], "veterinarian_id", "veterinarian"),
+  ]);
+
+  return encountersWithVets.map((enc) => ({
     encounter: enc,
     notes: notesRes.data?.find((n) => n.encounter_id === enc.id) || null,
     diagnoses: diagnosesRes.data?.filter((d) => d.encounter_id === enc.id) || [],
     treatments: treatmentsRes.data?.filter((t) => t.encounter_id === enc.id) || [],
     prescriptions: prescriptionsRes.data?.filter((p) => p.encounter_id === enc.id) || [],
-    amendments: amendmentsRes.data?.filter((a) => a.encounter_id === enc.id) || [],
+    amendments: amendments.filter((a) => a.encounter_id === enc.id),
   }));
 }
 
@@ -595,13 +623,15 @@ export async function saveEncounterDraft(
   if (payload.prescriptions) {
     // For simplicity in draft saving, we drop existing active prescriptions for this encounter and re-insert.
     // If they were dispensed/signed, the encounter wouldn't be in draft.
-    await supabase.from("prescriptions").delete().eq("encounter_id", encounterId);
+    const { error: deleteError } = await supabase.from("prescriptions").delete().eq("encounter_id", encounterId);
+    if (deleteError) throw new Error(`Could not save prescriptions: ${deleteError.message}`);
     if (payload.prescriptions.length > 0) {
       // Need petId for prescriptions
-      const { data: encDetail } = await supabase.from("encounters").select("pet_id").eq("id", encounterId).single();
+      const { data: encDetail, error: encError } = await supabase.from("encounters").select("pet_id").eq("id", encounterId).single();
+      if (encError) throw encError;
       const petId = encDetail?.pet_id;
       if (petId) {
-        await supabase.from("prescriptions").insert(
+        const { error: insertError } = await supabase.from("prescriptions").insert(
           payload.prescriptions.map((p) => ({
             ...p,
             encounter_id: encounterId,
@@ -610,6 +640,7 @@ export async function saveEncounterDraft(
             status: "active",
           }))
         );
+        if (insertError) throw new Error(`Could not save prescriptions: ${insertError.message}`);
       }
     }
   }

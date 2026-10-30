@@ -2,7 +2,7 @@
 
 import { createClient } from "@/utils/supabase/server";
 import { Tables, TablesInsert, TablesUpdate } from "@/types/supabase";
-import { isAdminOrStaff, isStaff, requireAuth } from "@/services/authorization";
+import { isAdminOrStaff, isClinicMember, requireAuth } from "@/services/authorization";
 import { revalidatePath } from "next/cache";
 
 export type Pet = Tables<"pets">;
@@ -71,7 +71,7 @@ function parseAge(value: string): number | null {
 }
 
 function assertClinicStaff(role: Tables<"profiles">["role"]): void {
-  if (!isStaff({ role })) {
+  if (!isClinicMember({ role })) {
     throw new Error("Only clinic staff can view registry records.");
   }
 }
@@ -93,13 +93,22 @@ function toPetPayload(input: PetFormInput): Omit<PetInsert, "id" | "created_at" 
 }
 
 export async function listPetsForCurrentUser() {
-  await requireAuth();
+  const { profile } = await requireAuth();
   const supabase = await createClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("pets")
     .select("*, pet_owners(id, relationship, is_primary_contact, can_view_medical_records, can_receive_notifications, owner_profile_id, profiles!pet_owners_owner_profile_id_fkey(full_name, email, phone))")
-    .order("name")
-    .limit(100);
+    .order("name");
+  // Owners: only their own pets (RLS enforces this too). Clinic: every pet, no cap.
+  if (profile.role === "owner") {
+    const { data: links, error: linksError } = await supabase
+      .from("pet_owners")
+      .select("pet_id")
+      .eq("owner_profile_id", profile.id);
+    if (linksError) throw linksError;
+    query = query.in("id", (links ?? []).map((link) => link.pet_id));
+  }
+  const { data, error } = await query;
   if (error) throw error;
   return data;
 }

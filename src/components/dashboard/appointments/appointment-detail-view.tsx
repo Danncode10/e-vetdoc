@@ -133,6 +133,10 @@ export function AppointmentDetailView({
   const [showBillingDialog, setShowBillingDialog] = React.useState(false);
   const router = useRouter();
   const isClinicTeam = userRole === "admin" || userRole === "staff" || userRole === "veterinarian";
+  // Billing is the front desk's job (Admin/Staff); vets do the medical work.
+  const canBill = userRole === "admin" || userRole === "staff";
+  // A new encounter only makes sense for a visit that is still booked.
+  const canStartEncounter = appointment.status === "booked";
 
   const owner = appointment.owner || appointment.profiles;
   const petProfile = appointment.pets;
@@ -173,7 +177,7 @@ export function AppointmentDetailView({
               </Link>
             )
           ) : (
-            (isClinicTeam) && onStartEncounter && (
+            isClinicTeam && canStartEncounter && onStartEncounter && (
               <Button
                 variant="default"
                 size="sm"
@@ -185,6 +189,7 @@ export function AppointmentDetailView({
                     await onStartEncounter();
                   } catch (e) {
                     console.error(e);
+                    toast.error(e instanceof Error ? e.message : "Could not start the encounter.");
                     setIsStarting(false);
                   }
                 }}
@@ -204,7 +209,7 @@ export function AppointmentDetailView({
             Print Details
           </Button>
           {/* ── Charge & Mark Paid button ── */}
-          {(isClinicTeam) && (
+          {canBill && appointment.status !== "paid" && (
             <button
               onClick={() => {
                 if (appointment.status !== "diagnosed") {
@@ -229,11 +234,9 @@ export function AppointmentDetailView({
       </div>
 
       {/* ── Quick Billing Dialog ── */}
-      {(isClinicTeam) && (
+      {canBill && (
         <QuickBillingDialog
           appointmentId={appointment.id}
-          ownerId={appointment.owner_id}
-          encounterId={existingEncounter?.id}
           serviceDescription={service?.name ?? "Veterinary Consultation"}
           suggestedAmount={service?.price_from ? Number(service.price_from) : 0}
           open={showBillingDialog}
