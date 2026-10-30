@@ -5,11 +5,11 @@ import "server-only";
 import { createClient, createAdminClient } from "@/utils/supabase/server";
 import { requireRole, ADMIN_STAFF_ROLES } from "@/services/authorization";
 
-export type LogCategory = "all" | "appointment" | "clinical" | "billing" | "staff";
+export type LogCategory = "all" | "appointment" | "clinical" | "billing" | "staff" | "account";
 
 export interface ClinicActivityLog {
   id: string;
-  category: "appointment" | "clinical" | "billing" | "staff";
+  category: "appointment" | "clinical" | "billing" | "staff" | "account";
   action: string;
   description: string;
   actor: {
@@ -25,6 +25,41 @@ export interface ClinicActivityLog {
   };
   timestamp: string;
   metadata?: Record<string, any>;
+}
+
+/** Self-service account changes, written by database triggers (see presence_and_account_audit migration). */
+const ACCOUNT_ACTIONS = new Set(["profile_updated", "password_changed", "email_changed"]);
+
+const PROFILE_FIELD_LABELS: Record<string, string> = {
+  full_name: "name",
+  phone: "phone number",
+  address: "address",
+  emergency_contact_name: "emergency contact name",
+  emergency_contact_phone: "emergency contact phone",
+  email: "email",
+};
+
+function describeStaffLog(action: string, actorName: string, targetName: string, isSelf: boolean, changedFields: string[]) {
+  const subject = isSelf ? "their" : `${targetName}'s`;
+  switch (action) {
+    case "registration_approved":
+      return `${actorName} approved the registration of ${targetName}.`;
+    case "registration_rejected":
+      return `${actorName} disapproved the registration of ${targetName}.`;
+    case "profile_updated": {
+      const order = Object.keys(PROFILE_FIELD_LABELS);
+      const fields = [...changedFields]
+        .sort((a, b) => order.indexOf(a) - order.indexOf(b))
+        .map((field) => PROFILE_FIELD_LABELS[field] ?? field.replace(/_/g, " "));
+      return `${actorName} updated ${subject} ${fields.length ? fields.join(", ") : "profile"}.`;
+    }
+    case "password_changed":
+      return `${actorName} changed ${subject} password.`;
+    case "email_changed":
+      return `${actorName} changed ${subject} email address.`;
+    default:
+      return `${actorName} modified staff profile for ${targetName}.`;
+  }
 }
 
 export interface ActivityLogFilters {
@@ -300,16 +335,17 @@ export async function getClinicActivityLogs(
         (sl.target as any)?.email ||
         "Staff Member";
 
+      const isAccountChange = ACCOUNT_ACTIONS.has(sl.action);
+      const changedFields =
+        sl.next_values && typeof sl.next_values === "object" && !Array.isArray(sl.next_values)
+          ? Object.keys(sl.next_values)
+          : [];
+
       logs.push({
         id: `staff-${sl.id}`,
-        category: "staff",
+        category: isAccountChange ? "account" : "staff",
         action: sl.action.replace(/_/g, " ").toUpperCase(),
-        description:
-          sl.action === "registration_approved"
-            ? `${actorName} approved the registration of ${targetName}.`
-            : sl.action === "registration_rejected"
-              ? `${actorName} disapproved the registration of ${targetName}.`
-              : `${actorName} modified staff profile for ${targetName}.`,
+        description: describeStaffLog(sl.action, actorName, targetName, sl.actor_id === sl.target_profile_id, changedFields),
         actor: {
           id: sl.actor_id,
           name: actorName,
@@ -317,7 +353,7 @@ export async function getClinicActivityLogs(
           email: (sl.actor as any)?.email ?? null,
         },
         target: {
-          type: "staff",
+          type: isAccountChange ? "account" : "staff",
           label: targetName,
           id: sl.target_profile_id,
         },

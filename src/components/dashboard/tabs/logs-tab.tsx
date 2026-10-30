@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CalendarRange,
+  UserCog,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,7 @@ const CATEGORIES = [
   { id: "clinical", label: "Clinical & EMR", icon: Stethoscope },
   { id: "billing", label: "Billing & Payments", icon: Receipt },
   { id: "staff", label: "Staff & Security", icon: ShieldCheck },
+  { id: "account", label: "Account Changes", icon: UserCog },
 ] as const;
 
 const BADGE_STYLES: Record<string, { bg: string; text: string; border: string }> = {
@@ -78,6 +80,11 @@ const BADGE_STYLES: Record<string, { bg: string; text: string; border: string }>
     bg: "bg-amber-500/10 dark:bg-amber-500/20",
     text: "text-amber-600 dark:text-amber-400",
     border: "border-amber-500/20",
+  },
+  account: {
+    bg: "bg-sky-500/10 dark:bg-sky-500/20",
+    text: "text-sky-600 dark:text-sky-400",
+    border: "border-sky-500/20",
   },
 };
 
@@ -105,13 +112,12 @@ export function LogsTab() {
       logsMemoryCache &&
       Date.now() - logsMemoryCache.fetchedAt < CACHE_TTL_MS;
 
+    // Show cached logs instantly, but always fetch fresh ones so new changes appear on open.
     if (isCacheValid && logsMemoryCache) {
       setLogs(logsMemoryCache.data);
       setLoading(false);
-      return;
-    }
-
-    if (forceBypassCache) setRefreshing(true);
+      setRefreshing(true);
+    } else if (forceBypassCache) setRefreshing(true);
     else setLoading(true);
 
     try {
@@ -176,6 +182,7 @@ export function LogsTab() {
       clinical: logs.filter((l) => l.category === "clinical").length,
       billing: logs.filter((l) => l.category === "billing").length,
       staff: logs.filter((l) => l.category === "staff").length,
+      account: logs.filter((l) => l.category === "account").length,
     };
   }, [logs]);
 
