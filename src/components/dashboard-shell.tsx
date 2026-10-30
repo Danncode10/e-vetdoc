@@ -28,6 +28,7 @@ import type { User as SupabaseUser } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 import { getEnabledTabs, isFeatureEnabled, type DashboardTabId } from "@/lib/dashboard-features";
 import { roleLabel } from "@/lib/roles";
+import { usePresenceHeartbeat } from "@/hooks/use-presence-heartbeat";
 import { OverviewTab } from "@/components/dashboard/tabs/overview-tab";
 import { PetsTab } from "@/components/dashboard/tabs/pets-tab";
 import { OwnersTab } from "@/components/dashboard/tabs/owners-tab";
@@ -92,6 +93,8 @@ export function DashboardShell({ user, profile, children }: DashboardShellProps)
   const displayName = currentProfile.full_name || user.email?.split("@")[0] || "there";
   const initials = displayName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
   const currentRoleLabel = roleLabel(userRole);
+
+  usePresenceHeartbeat();
 
   React.useEffect(() => {
     if (userRole === "admin") {

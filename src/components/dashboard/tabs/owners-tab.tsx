@@ -20,8 +20,16 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { listOwnerRegistry } from "@/services/pets";
 import type { UserRole } from "@/lib/dashboard-features";
+import { isOnline, lastSeenLabel, PRESENCE_HEARTBEAT_MS } from "@/lib/presence";
 
 type OwnerRecord = Awaited<ReturnType<typeof listOwnerRegistry>>[number];
+type PresenceFilter = "all" | "online" | "offline";
+
+const PRESENCE_FILTERS: ReadonlyArray<{ id: PresenceFilter; label: string }> = [
+  { id: "all", label: "All owners" },
+  { id: "online", label: "Online" },
+  { id: "offline", label: "Offline" },
+];
 
 function getInitials(name?: string | null, email?: string | null): string {
   if (name && name.trim()) {
@@ -52,6 +60,8 @@ export function OwnersTab({ role }: { role: UserRole }) {
   const router = useRouter();
   const [owners, setOwners] = React.useState<any[]>([]);
   const [query, setQuery] = React.useState("");
+  const [presence, setPresence] = React.useState<PresenceFilter>("all");
+  const [now, setNow] = React.useState(() => Date.now());
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [currentPage, setCurrentPage] = React.useState(1);
@@ -71,18 +81,34 @@ export function OwnersTab({ role }: { role: UserRole }) {
       }
     };
 
-    if (isClinicRole) void loadOwners();
+    if (!isClinicRole) return;
+    void loadOwners();
+    // Keep Online/Offline current while the tab stays open.
+    const timer = window.setInterval(() => {
+      setNow(Date.now());
+      void loadOwners();
+    }, PRESENCE_HEARTBEAT_MS);
+    return () => window.clearInterval(timer);
   }, [isClinicRole]);
 
-  // Reset page when query changes
+  // Reset page when query or filter changes
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [query]);
+  }, [query, presence]);
 
   if (!isClinicRole) return null;
 
   const normalizedQuery = query.trim().toLowerCase();
+  const onlineCount = owners.filter((owner) => isOnline(owner.last_seen_at, now)).length;
+  const presenceCounts: Record<PresenceFilter, number> = {
+    all: owners.length,
+    online: onlineCount,
+    offline: owners.length - onlineCount,
+  };
   const filteredOwners = owners.filter((owner) => {
+    const online = isOnline(owner.last_seen_at, now);
+    if ((presence === "online" && !online) || (presence === "offline" && online)) return false;
+
     const ownerText = `${owner.full_name ?? ""} ${owner.email ?? ""} ${owner.phone ?? ""}`.toLowerCase();
     const petText = (owner.pet_owners ?? [])
       .map((po: any) => po.pets?.name ?? "")
@@ -112,6 +138,30 @@ export function OwnersTab({ role }: { role: UserRole }) {
             Lookup pet owner accounts, access patient records, and view appointment history.
           </p>
         </div>
+      </div>
+
+      {/* Online / Offline filter */}
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Filter owners by status">
+        {PRESENCE_FILTERS.map((filter) => (
+          <Button
+            key={filter.id}
+            type="button"
+            variant={presence === filter.id ? "default" : "outline"}
+            aria-pressed={presence === filter.id}
+            data-testid={`owner-filter-${filter.id}`}
+            className="min-h-12 gap-2 rounded-xl px-4"
+            onClick={() => setPresence(filter.id)}
+          >
+            {filter.id !== "all" && (
+              <span
+                aria-hidden
+                className={`h-2 w-2 rounded-full ${filter.id === "online" ? "bg-emerald-500" : "bg-muted-foreground/50"}`}
+              />
+            )}
+            {filter.label}
+            <span className="rounded-full bg-background/20 px-1.5 text-xs font-semibold">{presenceCounts[filter.id]}</span>
+          </Button>
+        ))}
       </div>
 
       {/* Search Bar */}
@@ -151,7 +201,13 @@ export function OwnersTab({ role }: { role: UserRole }) {
         <div className="rounded-2xl border border-border bg-card p-12 text-center">
           <Users className="mx-auto h-10 w-10 text-muted-foreground mb-3" strokeWidth={1.5} />
           <p className="font-semibold text-foreground">
-            {query ? "No owner profiles match that search." : "No owner profiles found."}
+            {query
+              ? "No owner profiles match that search."
+              : presence === "online"
+                ? "No owners are online right now."
+                : presence === "offline"
+                  ? "Every owner is online right now."
+                  : "No owner profiles found."}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {query
@@ -174,10 +230,12 @@ export function OwnersTab({ role }: { role: UserRole }) {
 
               // Find latest/next active appointment
               const activeAppt = owner.appointments?.find((a: any) => ["booked"].includes(a.status)) || owner.appointments?.[0];
+              const online = isOnline(owner.last_seen_at, now);
 
               return (
                 <div
                   key={owner.id}
+                  data-testid={`owner-card-${owner.email}`}
                   className="group relative flex flex-col rounded-2xl border border-border bg-card overflow-hidden transition-shadow hover:shadow-md"
                 >
                   <div className="p-5 flex-1 space-y-4">
@@ -201,6 +259,21 @@ export function OwnersTab({ role }: { role: UserRole }) {
                               {apptCount} {apptCount === 1 ? "Visit" : "Visits"}
                             </span>
                           </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                          <span
+                            data-testid="owner-presence"
+                            className={`inline-flex items-center gap-1.5 font-medium ${online ? "text-emerald-700 dark:text-emerald-400" : "text-muted-foreground"}`}
+                          >
+                            <span aria-hidden className={`h-2 w-2 rounded-full ${online ? "bg-emerald-500" : "bg-muted-foreground/50"}`} />
+                            {lastSeenLabel(owner.last_seen_at, now)}
+                          </span>
+                          {owner.approval_status === "pending" && (
+                            <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                              Pending approval
+                            </span>
+                          )}
                         </div>
 
                         <div className="space-y-1 text-xs text-muted-foreground pt-1">
