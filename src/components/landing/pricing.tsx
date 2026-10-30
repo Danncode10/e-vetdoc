@@ -9,7 +9,7 @@ const PLANS = [
     name: "Plan a visit",
     price: "One",
     suffix: " clear request",
-    description: "Choose your pet, share what they need, and send your request to the clinic.",
+    description: "Choose your pet, pick an open day and time, and your visit is confirmed right away.",
     features: [
       "Choose a linked pet",
       "Share your reason for visiting",

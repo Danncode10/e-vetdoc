@@ -1,7 +1,12 @@
 "use client";
 
 export default function SchedulesPageDefault() {
-  return <SchedulesCalendarPage />;
+  // The schedule lives in the dashboard's Schedule tab, which knows the user's role.
+  const router = useRouter();
+  useEffect(() => {
+    router.replace("/dashboard?tab=schedules");
+  }, [router]);
+  return null;
 }
 
 import { useState, useEffect, useRef } from "react";
@@ -12,7 +17,8 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 export function SchedulesTab({ role }: { role?: string | null }) {
-  return <SchedulesCalendarPage />;
+  // Admin and Staff manage schedules; vets can view them (audit H3).
+  return <SchedulesCalendarPage canManage={role === "admin" || role === "staff"} />;
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -45,13 +51,14 @@ function formatTime12(time: string): string {
 // ──────────────────────────────────────────────────────────────
 
 interface ScheduleModalProps {
+  canManage: boolean;
   schedules: any[];
   onClose: () => void;
   onEdit: (schedule: any) => void;
   onDelete: (id: string) => void;
 }
 
-function ScheduleModal({ schedules, onClose, onEdit, onDelete }: ScheduleModalProps) {
+function ScheduleModal({ canManage, schedules, onClose, onEdit, onDelete }: ScheduleModalProps) {
   useEffect(() => {
     function handleEscape(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
@@ -116,7 +123,7 @@ function ScheduleModal({ schedules, onClose, onEdit, onDelete }: ScheduleModalPr
                 </span>
               </div>
 
-              <div className="flex gap-3 pt-4 border-t border-border">
+              {canManage && <div className="flex gap-3 pt-4 border-t border-border">
                 <Button
                   variant="outline"
                   size="sm"
@@ -135,7 +142,7 @@ function ScheduleModal({ schedules, onClose, onEdit, onDelete }: ScheduleModalPr
                   <Trash2 className="w-4 h-4 mr-2" />
                   Delete
                 </Button>
-              </div>
+              </div>}
             </div>
           ))}
         </div>
@@ -149,6 +156,7 @@ function ScheduleModal({ schedules, onClose, onEdit, onDelete }: ScheduleModalPr
 // ──────────────────────────────────────────────────────────────
 
 interface DayCellProps {
+  canManage: boolean;
   day: number | null;
   dateStr: string | null;
   schedules: any[];
@@ -158,7 +166,7 @@ interface DayCellProps {
   onAddDate: (dateStr: string) => void;
 }
 
-function DayCell({ day, dateStr, schedules, isToday, onEdit, onDelete, onAddDate }: DayCellProps) {
+function DayCell({ canManage, day, dateStr, schedules, isToday, onEdit, onDelete, onAddDate }: DayCellProps) {
   const [showModal, setShowModal] = useState(false);
 
   if (day === null || dateStr === null) {
@@ -172,7 +180,7 @@ function DayCell({ day, dateStr, schedules, isToday, onEdit, onDelete, onAddDate
     <>
       <button
         onClick={() => hasSchedule && setShowModal(true)}
-        onDoubleClick={() => dateStr && onAddDate(dateStr)}
+        onDoubleClick={() => canManage && dateStr && onAddDate(dateStr)}
         className={`
           w-full min-h-[72px] rounded-xl border text-left p-2 transition-all duration-150 group flex flex-col gap-1 select-none
           ${hasSchedule && !isClosed
@@ -183,7 +191,7 @@ function DayCell({ day, dateStr, schedules, isToday, onEdit, onDelete, onAddDate
           }
           ${isToday ? "ring-2 ring-primary ring-offset-1" : ""}
         `}
-        title={dateStr ? "Double-click to add a schedule for this date" : undefined}
+        title={canManage && dateStr ? "Double-click to add a schedule for this date" : undefined}
       >
         {/* Day number */}
         <span
@@ -230,6 +238,7 @@ function DayCell({ day, dateStr, schedules, isToday, onEdit, onDelete, onAddDate
       {/* Modal */}
       {showModal && hasSchedule && (
         <ScheduleModal
+          canManage={canManage}
           schedules={schedules}
           onClose={() => setShowModal(false)}
           onEdit={(s) => {
@@ -250,7 +259,7 @@ function DayCell({ day, dateStr, schedules, isToday, onEdit, onDelete, onAddDate
 // Main calendar page
 // ──────────────────────────────────────────────────────────────
 
-function SchedulesCalendarPage() {
+function SchedulesCalendarPage({ canManage }: { canManage: boolean }) {
   const router = useRouter();
 
   const today = new Date();
@@ -375,14 +384,20 @@ function SchedulesCalendarPage() {
           </p>
         </div>
 
-        <Button
-          onClick={() => router.push("/dashboard/schedules/new")}
-          className="flex items-center gap-2 shrink-0"
-          id="add-schedule-btn"
-        >
-          <Plus className="w-4 h-4" />
-          Add Schedule
-        </Button>
+        {canManage ? (
+          <Button
+            onClick={() => router.push("/dashboard/schedules/new")}
+            className="flex items-center gap-2 shrink-0"
+            id="add-schedule-btn"
+          >
+            <Plus className="w-4 h-4" />
+            Add Schedule
+          </Button>
+        ) : (
+          <p className="text-xs text-muted-foreground" data-testid="schedule-read-only">
+            View only — Admin or Staff manage the clinic schedule.
+          </p>
+        )}
       </div>
 
       {/* ── Calendar Card ── */}
@@ -446,6 +461,7 @@ function SchedulesCalendarPage() {
               return (
                 <DayCell
                   key={idx}
+                  canManage={canManage}
                   day={day}
                   dateStr={dateStr}
                   schedules={schedulesForDay}
@@ -485,16 +501,20 @@ function SchedulesCalendarPage() {
         <div className="mt-6 flex flex-col items-center justify-center py-12 text-center">
           <CalendarDays className="w-12 h-12 text-muted-foreground/50 mb-3" strokeWidth={1.5} />
           <p className="text-sm font-medium text-muted-foreground">No schedules configured yet</p>
-          <p className="text-xs text-muted-foreground/70 mt-1 mb-4">
-            Click &ldquo;Add Schedule&rdquo; to set available days for appointments.
-          </p>
-          <Button
-            variant="outline"
-            onClick={() => router.push("/dashboard/schedules/new")}
-          >
-            <Plus className="w-4 h-4 mr-1.5" />
-            Add your first schedule
-          </Button>
+          {canManage && (
+            <>
+              <p className="text-xs text-muted-foreground/70 mt-1 mb-4">
+                Click &ldquo;Add Schedule&rdquo; to set available days for appointments.
+              </p>
+              <Button
+                variant="outline"
+                onClick={() => router.push("/dashboard/schedules/new")}
+              >
+                <Plus className="w-4 h-4 mr-1.5" />
+                Add your first schedule
+              </Button>
+            </>
+          )}
         </div>
       )}
     </div>

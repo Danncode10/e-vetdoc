@@ -126,7 +126,7 @@ const ADMIN_QUICK_ACTIONS = [
     description: "Review staff activity, diagnostic history, and system events",
     badge: "Admin Audit",
     tab: "logs" as DashboardTabId,
-    feature: "admin-only" as const,
+    feature: "admin-or-staff" as const,
     iconTheme: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20",
   },
 ];

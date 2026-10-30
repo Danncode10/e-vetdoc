@@ -37,6 +37,10 @@ Clinical and financial history must still be traceable. The MVP does not permit 
 
 ## Users and authorization
 
+> **Update (Oct 2026):** a fourth role, **Staff**, was added at the client's request, accounts
+> need clinic approval, and Admin/Staff may also sign encounters. The current role matrix is in
+> [`OVERALL.md`](OVERALL.md) §3. The table below is the original MVP decision.
+
 There are exactly three application roles:
 
 | Role | Responsibilities | Access boundary |

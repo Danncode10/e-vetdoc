@@ -3,7 +3,7 @@ import { getOwnerRegistryDetail } from "@/services/pets";
 import { requireAuth } from "@/services/authorization";
 import { notFound, redirect } from "next/navigation";
 import { AppointmentDetailView } from "@/components/dashboard/appointments/appointment-detail-view";
-import { createEncounter, getEncounterByAppointmentId } from "@/services/clinical";
+import { getEncounterByAppointmentId, startEncounterForAppointment } from "@/services/clinical";
 
 export default async function AppointmentDetailPage({
   params,
@@ -44,11 +44,7 @@ export default async function AppointmentDetailPage({
 
   const handleStartEncounter = async () => {
     "use server";
-    const encounter = await createEncounter({
-      appointment_id: appt.id,
-      pet_id: appt.pet_id,
-      veterinarian_id: profile.id,
-    });
+    const encounter = await startEncounterForAppointment(appt.id);
     redirect(`/dashboard/encounters/${encounter.id}`);
   };
 

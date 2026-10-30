@@ -1,9 +1,9 @@
-import { requireRole, CLINIC_ROLES } from "@/services/authorization";
+import { requireRole, ADMIN_STAFF_ROLES } from "@/services/authorization";
 import { createClient } from "@/utils/supabase/server";
 import { InvoiceBuilder } from "@/components/dashboard/billing/invoice-builder";
 
 export default async function NewInvoicePage() {
-  await requireRole(CLINIC_ROLES);
+  await requireRole(ADMIN_STAFF_ROLES);
   const supabase = await createClient();
 
   // Fetch all owner profiles for the owner selector

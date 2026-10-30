@@ -1,5 +1,9 @@
 # E-VetDoc System Architecture & Flow
 
+> **Outdated (MVP era).** Booking is now instant with a capacity limit (status `booked`, not
+> `requested`/`scheduled`), there are four roles, and queries use the Supabase client, not Drizzle.
+> The current, complete description is [`OVERALL.md`](../../OVERALL.md).
+
 This document provides a high-level overview of the E-VetDoc system architecture and the standard operational flow, designed for incoming developers and thesis researchers.
 
 ## Technology Stack

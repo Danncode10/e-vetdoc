@@ -2,7 +2,8 @@
 
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
-import { isAdminOrStaff, isStaff, requireAuth } from "@/services/authorization";
+import { ADMIN_STAFF_ROLES, isAdminOrStaff, requireAuth, requireRole } from "@/services/authorization";
+import { fillClinicNames } from "@/services/clinic-names";
 import type {
   TablesInsert,
   TablesUpdate,
@@ -67,7 +68,7 @@ export async function listAppointments(filters?: {
 
   const { data, error } = await query;
   if (error) throw error;
-  return data;
+  return fillClinicNames(data, "assigned_veterinarian_id", "veterinarian");
 }
 
 export async function getAppointmentById(id: string) {
@@ -86,24 +87,8 @@ export async function getAppointmentById(id: string) {
     .eq("id", id)
     .single();
   if (error) throw error;
-  return data;
-}
-
-export async function createAppointment(input: AppointmentInsert) {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("appointments")
-    .insert({
-      ...input,
-      status: 'booked',
-      requested_at: new Date().toISOString(),
-      confirmed_at: new Date().toISOString(),
-    })
-    .select()
-    .single();
-  if (error) throw error;
-  revalidatePath("/dashboard/appointments");
-  return data;
+  const [withNames] = await fillClinicNames([data], "assigned_veterinarian_id", "veterinarian");
+  return withNames;
 }
 
 // Appointments in these statuses no longer hold a place in a schedule slot.
@@ -126,19 +111,8 @@ async function requireAppointmentManager(options: { allowOwner?: boolean } = {})
   throw new Error(APPOINTMENT_MANAGEMENT_ERROR);
 }
 
-export async function updateAppointment(id: string, updates: AppointmentUpdate) {
-  await requireAppointmentManager();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("appointments")
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq("id", id)
-    .select()
-    .single();
-  if (error) throw error;
-  revalidatePath("/dashboard/appointments");
-  return data;
-}
+// Only a booking that has not happened yet can be cancelled (not diagnosed, paid, etc.).
+const CANCELLABLE_STATUSES = ["booked", "requested", "scheduled", "confirmed"] as const;
 
 export async function cancelAppointment(id: string, reason?: string) {
   // Owners may cancel their own bookings; RLS limits them to their own rows.
@@ -158,171 +132,12 @@ export async function cancelAppointment(id: string, reason?: string) {
       updated_at: new Date().toISOString(),
     })
     .eq("id", id)
+    .in("status", CANCELLABLE_STATUSES)
     .select()
-    .single();
+    .maybeSingle();
   if (error) throw error;
+  if (!data) throw new Error("This appointment can no longer be cancelled.");
   revalidatePath("/dashboard/appointments");
-  return data;
-}
-
-export async function scheduleAppointment(
-  id: string,
-  input: {
-    scheduledStart: string;
-    scheduledEnd: string;
-    assignedVeterinarianId: string;
-    notes?: string;
-  }
-) {
-  await requireAppointmentManager();
-  const supabase = await createClient();
-
-  // Check for double-booking
-  const { data: doubleBooked } = await supabase.rpc("check_double_booking", {
-    p_veterinarian_id: input.assignedVeterinarianId,
-    p_start: input.scheduledStart,
-    p_end: input.scheduledEnd,
-    p_exclude_appointment_id: id,
-  });
-
-  if (doubleBooked) {
-    throw new Error("This veterinarian has a conflicting appointment at that time");
-  }
-
-  // Preserve preferred_date and preferred_time from existing appointment
-  const { data: existing } = await supabase
-    .from("appointments")
-    .select("preferred_date, preferred_time")
-    .eq("id", id)
-    .single();
-
-  const { data, error } = await supabase
-    .from("appointments")
-    .update({
-      status: "booked",
-      scheduled_start: input.scheduledStart,
-      scheduled_end: input.scheduledEnd,
-      assigned_veterinarian_id: input.assignedVeterinarianId,
-      confirmed_at: new Date().toISOString(),
-      // Preserve preferred_date and preferred_time from the original appointment request
-      ...(existing?.preferred_date !== undefined && { preferred_date: existing.preferred_date }),
-      ...(existing?.preferred_time !== undefined && { preferred_time: existing.preferred_time }),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id)
-    .select()
-    .single();
-  if (error) throw error;
-  revalidatePath("/dashboard/appointments");
-  return data;
-}
-
-export async function completeAppointment(id: string, notes?: string) {
-  const { profile } = await requireAuth();
-  if (!isStaff(profile)) throw new Error("Only the clinic team can complete appointments.");
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("appointments")
-    .update({
-      status: "completed",
-      completed_at: new Date().toISOString(),
-      notes,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id)
-    .select()
-    .single();
-  if (error) throw error;
-  revalidatePath("/dashboard/appointments");
-  return data;
-}
-
-export async function markNoShow(id: string) {
-  await requireAppointmentManager();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("appointments")
-    .update({
-      status: "no_show",
-      no_show_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id)
-    .select()
-    .single();
-  if (error) throw error;
-  revalidatePath("/dashboard/appointments");
-  return data;
-}
-
-export async function rescheduleAppointment(
-  id: string,
-  input: {
-    newScheduledStart: string;
-    newScheduledEnd: string;
-    reason?: string;
-    notes?: string;
-  }
-) {
-  await requireAppointmentManager();
-  const supabase = await createClient();
-
-  // Get current appointment including preferred_date and preferred_time
-  const { data: current } = await supabase
-    .from("appointments")
-    .select("assigned_veterinarian_id, preferred_date, preferred_time")
-    .eq("id", id)
-    .single();
-
-  if (current?.assigned_veterinarian_id) {
-    const { data: doubleBooked } = await supabase.rpc("check_double_booking", {
-      p_veterinarian_id: current.assigned_veterinarian_id,
-      p_start: input.newScheduledStart,
-      p_end: input.newScheduledEnd,
-      p_exclude_appointment_id: id,
-    });
-
-    if (doubleBooked) {
-      throw new Error("This veterinarian has a conflicting appointment at that time");
-    }
-  }
-
-  const { data, error } = await supabase
-    .from("appointments")
-    .update({
-      scheduled_start: input.newScheduledStart,
-      scheduled_end: input.newScheduledEnd,
-      // Preserve preferred_date and preferred_time from the original appointment
-      ...(current?.preferred_date !== undefined && { preferred_date: current.preferred_date }),
-      ...(current?.preferred_time !== undefined && { preferred_time: current.preferred_time }),
-      notes: input.notes,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id)
-    .select()
-    .single();
-  if (error) throw error;
-  revalidatePath("/dashboard/appointments");
-  return data;
-}
-
-
-
-
-
-export async function getAppointmentStatusHistory(appointmentId: string) {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("appointment_status_history")
-    .select(
-      `
-      *,
-      profiles!appointment_status_history_changed_by_id_fkey (id, full_name, role)
-    `
-    )
-    .eq("appointment_id", appointmentId)
-    .order("created_at", { ascending: true });
-  if (error) throw error;
   return data;
 }
 
@@ -338,24 +153,6 @@ export async function listOwnerAppointments(ownerId: string) {
     `
     )
     .eq("owner_id", ownerId)
-    .order("scheduled_start", { ascending: false, nullsFirst: false });
-  if (error) throw error;
-  return data;
-}
-
-export async function listPetAppointments(petId: string) {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("appointments")
-    .select(
-      `
-      *,
-      profiles!appointments_owner_id_fkey (id, full_name, email),
-      profiles!appointments_assigned_veterinarian_id_fkey (id, full_name),
-      services (id, name, duration_minutes, price_from, price_to)
-    `
-    )
-    .eq("pet_id", petId)
     .order("scheduled_start", { ascending: false, nullsFirst: false });
   if (error) throw error;
   return data;
@@ -388,33 +185,6 @@ export async function requestAppointment(input: Omit<AppointmentInsert, 'owner_i
   });
   if (error) throw new Error(error.message);
   revalidatePath("/dashboard/appointments");
-  return data;
-}
-
-export async function getVeterinarianSchedule(veterinarianId: string, date: string) {
-  const supabase = await createClient();
-  const startOfDay = new Date(date);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
-
-  const { data, error } = await supabase
-    .from("appointments")
-    .select(
-      `
-      *,
-      pets (id, name, species, breed),
-      profiles!appointments_owner_id_fkey (id, full_name, phone),
-      services (id, name, duration_minutes)
-    `
-    )
-    .eq("assigned_veterinarian_id", veterinarianId)
-    // Filter by scheduled_start, but also include appointments with preferred_date in range
-    .gte("scheduled_start", startOfDay.toISOString())
-    .lte("scheduled_start", endOfDay.toISOString())
-    .in("status", ["booked"])
-    .order("scheduled_start", { ascending: false });
-  if (error) throw error;
   return data;
 }
 
@@ -472,6 +242,27 @@ export async function listAppointmentSchedules() {
   }
 }
 
+// Schedules set the booking limit, so only Admin and Staff may change them (vets can view).
+async function requireScheduleManager() {
+  const { profile } = await requireRole(ADMIN_STAFF_ROLES);
+  return profile;
+}
+
+function validateSchedule(input: { start_time?: string; end_time?: string; max_capacity?: number }) {
+  if (input.start_time && input.end_time && input.start_time.slice(0, 5) >= input.end_time.slice(0, 5)) {
+    throw new Error("The end time must be later than the start time.");
+  }
+  if (input.max_capacity !== undefined && (!Number.isInteger(input.max_capacity) || input.max_capacity < 1)) {
+    throw new Error("Max capacity must be a whole number of at least 1.");
+  }
+}
+
+function scheduleErrorMessage(error: { code?: string; message?: string }, fallback: string) {
+  if (error.code === "23505") return "A schedule already exists for that date and start time.";
+  if (error.code === "23514") return "Check the times and capacity: the end must be after the start and capacity at least 1.";
+  return error.message || fallback;
+}
+
 export async function createAppointmentSchedule(input: {
   specific_date: string; // ISO date string "YYYY-MM-DD", optional for recurring
   start_time: string;
@@ -481,17 +272,9 @@ export async function createAppointmentSchedule(input: {
   is_recurring?: boolean;
   is_closed?: boolean;
 }) {
+  const user = await requireScheduleManager();
+  validateSchedule(input);
   const supabase = await createClient();
-
-  // Get authenticated user for RLS context
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    throw new Error("User not authenticated");
-  }
 
   // Calculate day_of_week from specific_date if not provided
   const calculatedDayOfWeek = input.day_of_week !== undefined
@@ -531,7 +314,7 @@ export async function createAppointmentSchedule(input: {
 
   if (error) {
     console.error("EXACT_PG_ERROR_createAppointmentSchedule:", JSON.stringify(error, null, 2));
-    throw new Error(error.message || "Failed to create schedule");
+    throw new Error(scheduleErrorMessage(error, "Failed to create schedule"));
   }
 
   // Insert audit log
@@ -557,10 +340,8 @@ export async function updateAppointmentSchedule(
     is_closed?: boolean;
   }
 ) {
+  const user = await requireScheduleManager();
   const supabase = await createClient();
-
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) throw new Error("User not authenticated");
 
   // Ensure TIME format is HH:MM:SS (PostgreSQL TIME with time zone expects seconds)
   const formatTime = (time: string | undefined) => {
@@ -582,6 +363,12 @@ export async function updateAppointmentSchedule(
     .select("*")
     .eq("id", id)
     .single();
+
+  validateSchedule({
+    start_time: input.start_time ?? currentSchedule?.start_time,
+    end_time: input.end_time ?? currentSchedule?.end_time,
+    max_capacity: input.max_capacity,
+  });
 
   const isClosing = input.is_closed === true && currentSchedule?.is_closed === false;
   const isTimeOrDateChanged =
@@ -609,7 +396,7 @@ export async function updateAppointmentSchedule(
 
   if (error) {
     console.error("EXACT_PG_ERROR_updateAppointmentSchedule:", JSON.stringify(error, null, 2));
-    throw new Error(error.message || "Failed to update schedule");
+    throw new Error(scheduleErrorMessage(error, "Failed to update schedule"));
   }
 
   // Insert audit log
@@ -626,10 +413,8 @@ export async function updateAppointmentSchedule(
 }
 
 export async function deleteAppointmentSchedule(id: string) {
+  const user = await requireScheduleManager();
   const supabase = await createClient();
-
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) throw new Error("User not authenticated");
 
   const { data: currentSchedule } = await supabase
     .from("appointment_schedules")

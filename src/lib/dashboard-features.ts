@@ -38,7 +38,7 @@ export const TAB_CONFIG: TabConfig[] = [
   { id: "owners", label: "Owners", feature: "owners" },
   { id: "appointments", label: "Appointments", feature: "appointments" },
   { id: "schedules", label: "Schedule", feature: "staff-only" },
-  { id: "billing", label: "Billing", feature: "always" },
+  { id: "billing", label: "Billing", feature: "billing" },
   { id: "approvals", label: "Approvals", feature: "admin-or-staff" },
   { id: "team", label: "Team", feature: "admin-only" },
   { id: "logs", label: "Logs", feature: "admin-or-staff" },
@@ -68,6 +68,9 @@ export function isFeatureEnabled(flag: FeatureFlag, role: UserRole | null): bool
     case "appointments":
       // All authenticated users can access appointments (request/view)
       return role === "owner" || isClinicRole(role);
+    case "billing":
+      // Owners see their own invoices; Admin and Staff run billing. Vets do medical work only.
+      return role === "owner" || role === "admin" || role === "staff";
     case "staff-only":
       return isClinicRole(role);
     case "admin-or-staff":

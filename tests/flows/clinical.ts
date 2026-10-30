@@ -3,9 +3,10 @@ import { expect, Page } from '@playwright/test';
 export async function runVetClinicalFlow(page: Page) {
   // Use Admin credentials because unassigned appointments are only visible to admins due to RLS
   const loginEmail = process.env.TEST_ADMIN_EMAIL || 'adminTest@gmail.com';
-  const loginPassword = process.env.TEST_ADMIN_PASSWORD || 'jytmos-serQo0-sawfyv';
+  const loginPassword = process.env.TEST_ADMIN_PASSWORD!;
   
   await page.goto('/login');
+  await page.waitForLoadState('networkidle');
   await page.locator('#email').fill(loginEmail);
   await page.locator('#password').fill(loginPassword);
   await page.locator('button[type="submit"]').click();
@@ -15,7 +16,8 @@ export async function runVetClinicalFlow(page: Page) {
   await page.goto('/dashboard?tab=appointments');
   await expect(page.locator('text=Appointments').first()).toBeVisible({ timeout: 10000 });
 
-  // Assume DB has one appointment ready (from the owner booking flow)
+  // Encounters start only from booked visits, so open a booked one (from the owner booking flow).
+  await page.getByRole('button', { name: /^Booked/ }).click();
   await expect(page.getByRole('button', { name: 'View details' }).first()).toBeVisible({ timeout: 15000 });
   await page.getByRole('button', { name: 'View details' }).first().click();
   
@@ -73,7 +75,7 @@ export async function runAdminAuditVerification(page: Page) {
   await expect(page.locator('text=Welcome back')).toBeVisible({ timeout: 10000 });
   
   const actualAdminEmail = process.env.TEST_ADMIN_EMAIL || 'adminTest@gmail.com';
-  const actualAdminPassword = process.env.TEST_ADMIN_PASSWORD || 'jytmos-serQo0-sawfyv';
+  const actualAdminPassword = process.env.TEST_ADMIN_PASSWORD!;
   await page.locator('#email').fill(actualAdminEmail);
   await page.locator('#password').fill(actualAdminPassword);
   await page.locator('button[type="submit"]').click();

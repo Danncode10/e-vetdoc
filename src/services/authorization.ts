@@ -132,7 +132,7 @@ export function isAdminOrStaff(profile: Pick<Profile, "role"> | null): boolean {
 /**
  * Check if a profile belongs to the clinic team (admin, staff, or veterinarian).
  */
-export function isStaff(profile: Pick<Profile, "role"> | null): boolean {
+export function isClinicMember(profile: Pick<Profile, "role"> | null): boolean {
   return isAdminOrStaff(profile) || profile?.role === "veterinarian";
 }
 
