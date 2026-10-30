@@ -11,7 +11,7 @@ export function isOnline(lastSeenAt: string | null | undefined, now = Date.now()
 
 export function lastSeenLabel(lastSeenAt: string | null | undefined, now = Date.now()) {
   if (isOnline(lastSeenAt, now)) return "Online";
-  if (!lastSeenAt) return "Never signed in";
+  if (!lastSeenAt) return "Offline";
   const mins = Math.floor((now - new Date(lastSeenAt).getTime()) / 60_000);
   if (mins < 60) return `Last seen ${mins}m ago`;
   const hours = Math.floor(mins / 60);

@@ -1,14 +1,23 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { AlertTriangle, Loader2, ShieldCheck, Stethoscope, UserCog, UserPlus, UserRoundCheck, UserRoundX, X, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { addExistingStaff, setStaffActive, updateStaffRole, type StaffMember } from "@/services/staff";
+import { isOnline, lastSeenLabel, PRESENCE_HEARTBEAT_MS } from "@/lib/presence";
 
 type StaffRole = "admin" | "staff" | "veterinarian";
 type ManageableRole = StaffRole | "owner";
+type PresenceFilter = "all" | "online" | "offline";
+
+const PRESENCE_FILTERS: Array<{ id: PresenceFilter; label: string }> = [
+  { id: "all", label: "All" },
+  { id: "online", label: "Online" },
+  { id: "offline", label: "Offline" },
+];
 
 const inputClass = "min-h-12 w-full rounded-xl border border-input bg-card px-3.5 text-sm text-foreground outline-none ring-ring transition-all focus-visible:ring-2 focus-visible:border-primary";
 
@@ -53,8 +62,42 @@ const roleOptions: Array<{
   { value: "owner", label: "Pet owner", description: "Removes clinic-staff access while keeping the personal account active.", Icon: UserRoundCheck },
 ];
 
+/** A deactivated account cannot open the dashboard, so it always counts as offline. */
+function isMemberOnline(member: StaffMember, now: number) {
+  return member.is_active && isOnline(member.last_seen_at, now);
+}
+
+function PresenceBadge({ member, now }: { member: StaffMember; now: number }) {
+  if (!member.is_active) {
+    return (
+      <span
+        data-testid="staff-presence"
+        className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-bold text-destructive"
+      >
+        <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-destructive" />
+        Deactivated
+      </span>
+    );
+  }
+  const online = isOnline(member.last_seen_at, now);
+  return (
+    <span
+      data-testid="staff-presence"
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+        online ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+      }`}
+    >
+      <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${online ? "bg-primary" : "bg-muted-foreground/50"}`} />
+      {online ? "Online" : "Offline"}
+    </span>
+  );
+}
+
 export function StaffManagement({ staff }: { staff: StaffMember[] }) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [presence, setPresence] = useState<PresenceFilter>("all");
+  const [now, setNow] = useState(() => Date.now());
   const [newStaff, setNewStaff] = useState({ email: "", role: "veterinarian" as StaffRole });
   const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
   const [roleDrafts, setRoleDrafts] = useState<Record<string, ManageableRole>>({});
@@ -67,6 +110,25 @@ export function StaffManagement({ staff }: { staff: StaffMember[] }) {
   const activeAdminCount = staff.filter((member) => member.role === "admin" && member.is_active).length;
   const activeVetCount = staff.filter((member) => member.role === "veterinarian" && member.is_active).length;
   const activeTotalCount = staff.filter((member) => member.is_active).length;
+  const onlineCount = staff.filter((member) => isMemberOnline(member, now)).length;
+  const presenceCounts: Record<PresenceFilter, number> = {
+    all: staff.length,
+    online: onlineCount,
+    offline: staff.length - onlineCount,
+  };
+  const visibleStaff = staff.filter((member) => {
+    if (presence === "all") return true;
+    return isMemberOnline(member, now) === (presence === "online");
+  });
+
+  // Keep Online/Offline current while the Team page stays open.
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNow(Date.now());
+      router.refresh();
+    }, PRESENCE_HEARTBEAT_MS);
+    return () => window.clearInterval(timer);
+  }, [router]);
 
   function run(action: () => Promise<{ error?: string; success?: string }>) {
     startTransition(async () => {
@@ -179,6 +241,28 @@ export function StaffManagement({ staff }: { staff: StaffMember[] }) {
           <p className="text-xs sm:text-sm text-muted-foreground">
             Manage active roles, permissions, or suspend staff access.
           </p>
+          <div className="flex flex-wrap gap-2 pt-3" role="group" aria-label="Filter staff by online status">
+            {PRESENCE_FILTERS.map((filter) => (
+              <Button
+                key={filter.id}
+                type="button"
+                variant={presence === filter.id ? "default" : "outline"}
+                aria-pressed={presence === filter.id}
+                data-testid={`staff-filter-${filter.id}`}
+                className="min-h-12 gap-2 rounded-xl px-4"
+                onClick={() => setPresence(filter.id)}
+              >
+                {filter.id !== "all" && (
+                  <span
+                    aria-hidden
+                    className={`h-2 w-2 rounded-full ${filter.id === "online" ? "bg-primary" : "bg-muted-foreground/50"}`}
+                  />
+                )}
+                {filter.label}
+                <span className="rounded-full bg-background/20 px-1.5 text-xs font-semibold">{presenceCounts[filter.id]}</span>
+              </Button>
+            ))}
+          </div>
         </div>
 
         {staff.length === 0 ? (
@@ -186,9 +270,16 @@ export function StaffManagement({ staff }: { staff: StaffMember[] }) {
             <UserRoundCheck className="w-10 h-10 text-muted-foreground" strokeWidth={1.5} />
             <p className="text-sm font-medium text-foreground">No staff accounts added yet.</p>
           </div>
+        ) : visibleStaff.length === 0 ? (
+          <div className="flex min-h-48 flex-col items-center justify-center gap-3 p-8 text-center">
+            <Users className="w-10 h-10 text-muted-foreground" strokeWidth={1.5} />
+            <p className="text-sm font-medium text-foreground">
+              {presence === "online" ? "No clinic staff are online right now." : "Every clinic staff member is online right now."}
+            </p>
+          </div>
         ) : (
           <div className="divide-y divide-border/60">
-            {staff.map((member) => {
+            {visibleStaff.map((member) => {
               const currentRole = member.role as StaffRole;
               const draftRole = roleDrafts[member.id] ?? currentRole;
               const editingRole = editingRoleId === member.id;
@@ -196,26 +287,22 @@ export function StaffManagement({ staff }: { staff: StaffMember[] }) {
               const finalAdmin = isFinalActiveAdmin(member);
 
               return (
-                <article key={member.id} className="p-4 sm:p-6 space-y-4 hover:bg-muted/10 transition-colors">
+                <article key={member.id} data-testid={`staff-card-${member.email}`} className="p-4 sm:p-6 space-y-4 hover:bg-muted/10 transition-colors">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0 space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="truncate text-base font-bold text-foreground">{staffName(member)}</p>
                         <RoleBadge role={currentRole} />
-                        <span
-                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            member.is_active
-                              ? "bg-green-500/10 text-green-700 dark:text-green-400"
-                              : "bg-red-500/10 text-red-700 dark:text-red-400"
-                          }`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${member.is_active ? "bg-green-500" : "bg-red-500"}`} />
-                          {member.is_active ? "Active" : "Deactivated"}
-                        </span>
+                        <PresenceBadge member={member} now={now} />
                       </div>
                       <p className="truncate text-xs sm:text-sm text-muted-foreground">
                         {member.email ?? "No email recorded"}
                       </p>
+                      {member.is_active && member.last_seen_at && !isOnline(member.last_seen_at, now) && (
+                        <p data-testid="staff-last-seen" className="text-xs text-muted-foreground">
+                          {lastSeenLabel(member.last_seen_at, now)}
+                        </p>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-2">

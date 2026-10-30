@@ -10,7 +10,7 @@ type StaffRole = Extract<Database["public"]["Enums"]["user_role"], "admin" | "st
 type ManageableRole = StaffRole | "owner";
 type Profile = Tables<"profiles">;
 
-export type StaffMember = Pick<Profile, "id" | "email" | "full_name" | "role" | "created_at"> & {
+export type StaffMember = Pick<Profile, "id" | "email" | "full_name" | "role" | "created_at" | "last_seen_at"> & {
   is_active: boolean;
 };
 
@@ -121,7 +121,7 @@ export async function listStaff(): Promise<StaffMember[]> {
   const adminClient = createAdminClient();
   const { data, error } = await adminClient
     .from("profiles")
-    .select("id, email, full_name, role, is_active, created_at")
+    .select("id, email, full_name, role, is_active, created_at, last_seen_at")
     .in("role", [...STAFF_ROLES])
     .order("created_at", { ascending: true });
 
@@ -148,7 +148,7 @@ export async function addExistingStaff(input: { email: string; role: string }): 
     const adminClient = createAdminClient();
     const { data: target, error: targetError } = await adminClient
       .from("profiles")
-      .select("id, email, full_name, role, is_active, created_at")
+      .select("id, email, full_name, role, is_active, created_at, last_seen_at")
       .eq("email", email)
       .maybeSingle();
 
@@ -203,7 +203,7 @@ export async function updateStaffRole(input: { id: string; role: string }): Prom
     const adminClient = createAdminClient();
     const { data: target, error: targetError } = await adminClient
       .from("profiles")
-      .select("id, email, full_name, role, is_active, created_at")
+      .select("id, email, full_name, role, is_active, created_at, last_seen_at")
       .eq("id", input.id)
       .single();
 
@@ -245,7 +245,7 @@ export async function setStaffActive(input: { id: string; isActive: boolean }): 
     const adminClient = createAdminClient();
     const { data: target, error: targetError } = await adminClient
       .from("profiles")
-      .select("id, email, full_name, role, is_active, created_at")
+      .select("id, email, full_name, role, is_active, created_at, last_seen_at")
       .eq("id", input.id)
       .single();
 
