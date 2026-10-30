@@ -79,7 +79,8 @@ test('the directory lists every owner account in the database', async ({ page })
     .from('profiles')
     .select('id', { count: 'exact', head: true })
     .eq('role', 'owner')
-    .neq('approval_status', 'rejected');
+    .neq('approval_status', 'rejected')
+    .is('deleted_at', null);
   await openOwners(page, accounts.staff.email, accounts.staff.password);
   await expect(page.getByTestId('owner-filter-all')).toContainText(String(count));
 });

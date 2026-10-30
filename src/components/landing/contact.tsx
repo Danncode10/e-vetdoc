@@ -3,7 +3,7 @@ import { CalendarPlus, MapPin, Navigation } from "lucide-react";
 import { CLINIC } from "./clinic-info";
 
 export function Contact({ isAuthed }: { isAuthed: boolean }) {
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(CLINIC.mapQuery)}`;
+  const mapsUrl = CLINIC.mapsUrl;
   const embedUrl = `https://www.google.com/maps?q=${encodeURIComponent(CLINIC.mapQuery)}&output=embed`;
 
   return (

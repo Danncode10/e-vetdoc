@@ -17,7 +17,7 @@ test('navbar links open About us and Contact us with the clinic and developers',
   await expect(page).toHaveURL(/#contact$/);
   await expect(page.getByTestId('clinic-address')).toContainText('Cornwall Building, Stall 7 and 8');
   await expect(page.getByTestId('clinic-address')).toContainText('Bayombong, Nueva Vizcaya');
-  await expect(page.getByRole('link', { name: 'Get directions' })).toHaveAttribute('href', /google\.com\/maps/);
+  await expect(page.getByRole('link', { name: 'Get directions' })).toHaveAttribute('href', 'https://maps.app.goo.gl/UFRNE9BkJHRsNp3w7');
   if (process.env.SHOT_DIR) await page.locator('#contact').screenshot({ path: `${process.env.SHOT_DIR}/contact.png` });
 });
 

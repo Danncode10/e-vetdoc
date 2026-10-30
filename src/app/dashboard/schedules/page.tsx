@@ -11,14 +11,180 @@ export default function SchedulesPageDefault() {
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Plus, CalendarDays, Clock, Users, X, Pencil, Trash2 } from "lucide-react";
-import { listAppointmentSchedules, deleteAppointmentSchedule } from "@/services/appointments";
+import { ChevronLeft, ChevronRight, Plus, CalendarDays, Clock, Users, X, Pencil, Trash2, ListChecks, Loader2 } from "lucide-react";
+import { listAppointmentSchedules, deleteAppointmentSchedule, deleteAppointmentSchedulesBulk } from "@/services/appointments";
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 export function SchedulesTab({ role }: { role?: string | null }) {
   // Admin and Staff manage schedules; vets can view them (audit H3).
   return <SchedulesCalendarPage canManage={role === "admin" || role === "staff"} />;
+}
+
+// ──────────────────────────────────────────────────────────────
+// Delete several schedules at once (Admin / Staff)
+// ──────────────────────────────────────────────────────────────
+
+function fmt12(time: string) {
+  const [h, m] = time.split(":").map(Number);
+  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+}
+
+function BulkDeleteModal({
+  monthLabel,
+  schedules,
+  onClose,
+  onDeleted,
+}: {
+  monthLabel: string;
+  schedules: any[];
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirming, setConfirming] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !isDeleting) onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose, isDeleting]);
+
+  const allSelected = schedules.length > 0 && selected.size === schedules.length;
+  const bookingsAffected = schedules
+    .filter((s) => selected.has(s.id))
+    .reduce((sum, s) => sum + (s.booked_count ?? 0), 0);
+
+  const toggle = (id: string) =>
+    setSelected((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="absolute inset-0" onClick={() => !isDeleting && onClose()} />
+      <div
+        role="dialog"
+        aria-labelledby="bulk-delete-title"
+        className="relative w-full max-w-lg bg-card border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+      >
+        <div className="flex items-center justify-between p-5 border-b border-border bg-muted/30">
+          <div>
+            <h3 id="bulk-delete-title" className="text-lg font-semibold text-foreground tracking-tight">Delete schedules</h3>
+            <p className="text-sm text-muted-foreground mt-0.5">{monthLabel}: select the schedules to remove.</p>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="p-2 -mr-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-full transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {schedules.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 p-10 text-center">
+            <CalendarDays className="w-10 h-10 text-muted-foreground" strokeWidth={1.5} />
+            <p className="text-sm font-medium text-foreground">No schedules in {monthLabel}.</p>
+          </div>
+        ) : (
+          <>
+            <label className="flex min-h-12 cursor-pointer items-center gap-3 border-b border-border px-5 py-3 text-sm font-medium text-foreground">
+              <input
+                type="checkbox"
+                data-testid="bulk-select-all"
+                className="h-5 w-5 accent-primary"
+                checked={allSelected}
+                onChange={() => setSelected(allSelected ? new Set() : new Set(schedules.map((s) => s.id)))}
+              />
+              Select all ({schedules.length})
+            </label>
+            <ul className="flex-1 overflow-y-auto divide-y divide-border" style={{ scrollbarWidth: "thin" }}>
+              {schedules.map((s) => {
+                const date = new Date(`${String(s.specific_date).slice(0, 10)}T00:00:00`).toLocaleDateString(undefined, {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                });
+                return (
+                  <li key={s.id}>
+                    <label className="flex min-h-12 cursor-pointer items-center gap-3 px-5 py-3 hover:bg-muted/40">
+                      <input
+                        type="checkbox"
+                        data-testid={`bulk-select-${String(s.specific_date).slice(0, 10)}`}
+                        className="h-5 w-5 accent-primary"
+                        checked={selected.has(s.id)}
+                        onChange={() => toggle(s.id)}
+                      />
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-sm font-medium text-foreground">{date}</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {fmt12(s.start_time)} – {fmt12(s.end_time)} · max {s.max_capacity}
+                          {s.is_closed ? " · closed" : ""}
+                        </span>
+                      </span>
+                      {(s.booked_count ?? 0) > 0 && (
+                        <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
+                          {s.booked_count} booked
+                        </span>
+                      )}
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
+
+        <div className="flex flex-col-reverse gap-2 border-t border-border p-4 sm:flex-row sm:justify-end">
+          <Button type="button" variant="outline" className="min-h-12" onClick={onClose} disabled={isDeleting}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            data-testid="bulk-delete-confirm"
+            className="min-h-12 gap-2"
+            disabled={selected.size === 0 || isDeleting}
+            onClick={() => setConfirming(true)}
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete {selected.size || ""} schedule{selected.size === 1 ? "" : "s"}
+          </Button>
+        </div>
+      </div>
+
+      <ConfirmationDialog
+        open={confirming}
+        title={`Delete ${selected.size} schedule${selected.size === 1 ? "" : "s"}?`}
+        description={
+          bookingsAffected > 0
+            ? `${bookingsAffected} approved booking${bookingsAffected === 1 ? "" : "s"} on these dates will be cancelled. This cannot be undone.`
+            : "Bookings on these dates will be cancelled. This cannot be undone."
+        }
+        confirmLabel="Delete schedules"
+        isPending={isDeleting}
+        onOpenChange={(open) => { if (!open && !isDeleting) setConfirming(false); }}
+        onConfirm={async () => {
+          setIsDeleting(true);
+          const result = await deleteAppointmentSchedulesBulk([...selected]);
+          setIsDeleting(false);
+          setConfirming(false);
+          if (result.error !== undefined) {
+            toast.error(result.error);
+            return;
+          }
+          toast.success(`Deleted ${result.data.deleted} schedule${result.data.deleted === 1 ? "" : "s"}`);
+          onDeleted();
+        }}
+      />
+    </div>
+  );
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -270,6 +436,7 @@ function SchedulesCalendarPage({ canManage }: { canManage: boolean }) {
   });
   const [schedules, setSchedules] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showBulkDelete, setShowBulkDelete] = useState(false);
 
   useEffect(() => {
     fetchSchedules();
@@ -372,6 +539,19 @@ function SchedulesCalendarPage({ canManage }: { canManage: boolean }) {
 
   return (
     <div className="mx-auto w-full max-w-7xl py-6">
+      {showBulkDelete && (
+        <BulkDeleteModal
+          monthLabel={`${MONTH_NAMES[month]} ${year}`}
+          schedules={schedules
+            .filter((s) => String(s.specific_date ?? "").startsWith(`${year}-${String(month + 1).padStart(2, "0")}`))
+            .sort((a, b) => `${a.specific_date}${a.start_time}`.localeCompare(`${b.specific_date}${b.start_time}`))}
+          onClose={() => setShowBulkDelete(false)}
+          onDeleted={() => {
+            setShowBulkDelete(false);
+            void fetchSchedules();
+          }}
+        />
+      )}
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
@@ -386,14 +566,25 @@ function SchedulesCalendarPage({ canManage }: { canManage: boolean }) {
         </div>
 
         {canManage ? (
-          <Button
-            onClick={() => router.push("/dashboard/schedules/new")}
-            className="flex items-center gap-2 shrink-0"
-            id="add-schedule-btn"
-          >
-            <Plus className="w-4 h-4" />
-            Add Schedule
-          </Button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button
+              variant="outline"
+              onClick={() => setShowBulkDelete(true)}
+              className="flex min-h-12 items-center gap-2 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              id="bulk-delete-btn"
+            >
+              <ListChecks className="w-4 h-4" />
+              Delete multiple
+            </Button>
+            <Button
+              onClick={() => router.push("/dashboard/schedules/new")}
+              className="flex min-h-12 items-center gap-2 shrink-0"
+              id="add-schedule-btn"
+            >
+              <Plus className="w-4 h-4" />
+              Add Schedule
+            </Button>
+          </div>
         ) : (
           <p className="text-xs text-muted-foreground" data-testid="schedule-read-only">
             View only — Admin or Staff manage the clinic schedule.

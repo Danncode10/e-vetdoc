@@ -21,7 +21,8 @@ import { toast } from "sonner";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { deleteOwnerCompletely, listOwnerRegistry } from "@/services/pets";
+import { listOwnerRegistry, trashOwner } from "@/services/pets";
+import { OwnerTrash } from "@/components/dashboard/owners/owner-trash";
 import type { UserRole } from "@/lib/dashboard-features";
 import { isOnline, lastSeenLabel, PRESENCE_HEARTBEAT_MS } from "@/lib/presence";
 
@@ -69,6 +70,9 @@ export function OwnersTab({ role }: { role: UserRole }) {
   const [error, setError] = React.useState<string | null>(null);
   const [currentPage, setCurrentPage] = React.useState(1);
   const [deleteTarget, setDeleteTarget] = React.useState<any | null>(null);
+  const [view, setView] = React.useState<"directory" | "trash">("directory");
+  const [reloadKey, setReloadKey] = React.useState(0);
+  const canTrash = role === "admin" || role === "staff";
   const [isDeleting, setIsDeleting] = React.useState(false);
   const PAGE_SIZE = 6;
   const isClinicRole = role === "admin" || role === "staff" || role === "veterinarian";
@@ -94,7 +98,7 @@ export function OwnersTab({ role }: { role: UserRole }) {
       void loadOwners();
     }, PRESENCE_HEARTBEAT_MS);
     return () => window.clearInterval(timer);
-  }, [isClinicRole]);
+  }, [isClinicRole, reloadKey]);
 
   // Reset page when query or filter changes
   React.useEffect(() => {
@@ -143,7 +147,36 @@ export function OwnersTab({ role }: { role: UserRole }) {
             Lookup pet owner accounts, access patient records, and view appointment history.
           </p>
         </div>
+        {canTrash && (
+          <div className="flex gap-2" role="group" aria-label="Owner Directory or Trash">
+            <Button
+              type="button"
+              data-testid="view-directory"
+              variant={view === "directory" ? "default" : "outline"}
+              aria-pressed={view === "directory"}
+              className="min-h-12 gap-2"
+              onClick={() => setView("directory")}
+            >
+              <Users className="h-4 w-4" /> Owners
+            </Button>
+            <Button
+              type="button"
+              data-testid="view-trash"
+              variant={view === "trash" ? "default" : "outline"}
+              aria-pressed={view === "trash"}
+              className="min-h-12 gap-2"
+              onClick={() => setView("trash")}
+            >
+              <Trash2 className="h-4 w-4" /> Trash
+            </Button>
+          </div>
+        )}
       </div>
+
+      {view === "trash" ? (
+        <OwnerTrash role={role} onChanged={() => setReloadKey((k) => k + 1)} />
+      ) : (
+      <>
 
       {/* Online / Offline filter */}
       <div className="flex flex-wrap gap-2" role="group" aria-label="Filter owners by status">
@@ -347,16 +380,16 @@ export function OwnersTab({ role }: { role: UserRole }) {
                       <ExternalLink className="w-3.5 h-3.5" />
                       Open Owner Profile & Appointment Records
                     </Button>
-                    {role === "admin" && (
+                    {canTrash && (
                       <Button
                         type="button"
                         variant="ghost"
-                        data-testid="delete-owner"
-                        className="w-full gap-2 text-xs h-9 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        data-testid="trash-owner"
+                        className="w-full gap-2 text-xs min-h-12 sm:min-h-9 text-destructive hover:text-destructive hover:bg-destructive/10"
                         onClick={() => setDeleteTarget(owner)}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                        Delete owner & all data
+                        Move to Trash
                       </Button>
                     )}
                   </div>
@@ -417,11 +450,13 @@ export function OwnersTab({ role }: { role: UserRole }) {
           )}
         </>
       )}
+      </>
+      )}
       <ConfirmationDialog
         open={Boolean(deleteTarget)}
-        title={`Permanently delete ${deleteTarget?.full_name || deleteTarget?.email || "this owner"}?`}
-        description="This deletes the owner's login, profile, pets they alone own, appointments, medical records, invoices and payments. Pets shared with another owner are kept. This cannot be undone."
-        confirmLabel="Delete owner permanently"
+        title={`Move ${deleteTarget?.full_name || deleteTarget?.email || "this owner"} to Trash?`}
+        description="The owner can't sign in and is hidden from the directory. Nothing is deleted: you can restore them from Trash at any time."
+        confirmLabel="Move to Trash"
         isPending={isDeleting}
         onOpenChange={(open) => {
           if (!open && !isDeleting) setDeleteTarget(null);
@@ -430,13 +465,13 @@ export function OwnersTab({ role }: { role: UserRole }) {
           if (!deleteTarget) return;
           setIsDeleting(true);
           try {
-            const deleteOwnerCompletelyResult = await deleteOwnerCompletely(deleteTarget.id);
-            if (deleteOwnerCompletelyResult.error) throw new Error(deleteOwnerCompletelyResult.error);
-            toast.success("Owner deleted", { description: `${deleteTarget.email ?? "The account"} and all of its data were removed.` });
+            const trashResult = await trashOwner(deleteTarget.id);
+            if (trashResult.error) throw new Error(trashResult.error);
+            toast.success("Moved to Trash", { description: `${deleteTarget.email ?? "The account"} can be restored from Trash.` });
             setOwners((current) => current.filter((o) => o.id !== deleteTarget.id));
             setDeleteTarget(null);
           } catch (e) {
-            toast.error(e instanceof Error ? e.message : "Could not delete this owner.");
+            toast.error(e instanceof Error ? e.message : "Could not move this owner to Trash.");
           } finally {
             setIsDeleting(false);
           }

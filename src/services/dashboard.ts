@@ -172,7 +172,7 @@ export async function getAdminDashboardSummary(): Promise<AdminDashboardSummary>
   const [petsRes, ownersRes, apptsRes, unpaidRes, recentApptsRes] = await Promise.all([
     supabase.from("pets").select("id", { count: "exact", head: true }),
     // Same rule as the Owners tab: every owner account except disapproved sign-ups.
-    supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "owner").neq("approval_status", "rejected"),
+    supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "owner").neq("approval_status", "rejected").is("deleted_at", null),
     // Active = pending approval, approved and still to be seen, or seen but not yet paid.
     supabase
       .from("appointments")

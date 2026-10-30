@@ -122,8 +122,9 @@ export async function listOwnerRegistry() {
     .from("profiles")
     .select("id, full_name, email, phone, last_seen_at, approval_status, pet_owners(pet_id, relationship, is_primary_contact, can_view_medical_records, pets(id, name, species, breed)), appointments!appointments_owner_id_fkey(id, status, scheduled_start, preferred_date, preferred_time, reason, services(id, name), pets(id, name))")
     .eq("role", "owner")
-    // Every owner account, online or not; disapproved sign-ups are not clients.
+    // Every owner account, online or not; disapproved sign-ups are not clients; Trash is separate.
     .neq("approval_status", "rejected")
+    .is("deleted_at", null)
     .order("full_name");
   if (error) throw error;
   return data;
@@ -359,4 +360,46 @@ async function deleteOwnerCompletelyOrThrow(ownerId: string) {
 
 export async function deleteOwnerCompletely(ownerId: string) {
   return asActionResult(() => deleteOwnerCompletelyOrThrow(ownerId));
+}
+
+/** Owners in Trash (Admin / Staff), most recently trashed first. */
+export async function listTrashedOwners() {
+  const { profile } = await requireAuth();
+  if (!isAdminOrStaff(profile)) throw new Error("Only Admin or Staff can view Trash.");
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name, email, phone, deleted_at, deleted_by, pet_owners(pet_id)")
+    .eq("role", "owner")
+    .not("deleted_at", "is", null)
+    .order("deleted_at", { ascending: false });
+  if (error) throw error;
+
+  // Who moved each owner to Trash (shown on the card).
+  const actorIds = [...new Set(data.map((o) => o.deleted_by).filter((id): id is string => Boolean(id)))];
+  const { data: actors } = actorIds.length
+    ? await supabase.from("profiles").select("id, full_name, email").in("id", actorIds)
+    : { data: [] as Array<{ id: string; full_name: string | null; email: string | null }> };
+  const actorById = new Map((actors ?? []).map((a) => [a.id, a]));
+  return data.map((owner) => ({ ...owner, deleted_by_profile: owner.deleted_by ? actorById.get(owner.deleted_by) ?? null : null }));
+}
+
+async function callOwnerRpc(fn: "trash_owner" | "restore_owner", ownerId: string) {
+  const { profile } = await requireAuth();
+  if (!isAdminOrStaff(profile)) throw new Error("Only Admin or Staff can do this.");
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc(fn, { p_owner_id: ownerId });
+  if (error) throw new Error(error.message);
+  revalidatePath("/dashboard");
+  return { email: data };
+}
+
+/** Admin / Staff: move an owner to Trash (signed out and hidden, nothing deleted). */
+export async function trashOwner(ownerId: string) {
+  return asActionResult(() => callOwnerRpc("trash_owner", ownerId));
+}
+
+/** Admin / Staff: bring an owner back from Trash. */
+export async function restoreOwner(ownerId: string) {
+  return asActionResult(() => callOwnerRpc("restore_owner", ownerId));
 }

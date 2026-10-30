@@ -60,6 +60,7 @@ export async function listPendingRegistrations(): Promise<PendingRegistration[]>
     .from("profiles")
     .select("id, email, full_name, requested_role, created_at")
     .eq("approval_status", "pending")
+    .is("deleted_at", null)
     .order("created_at", { ascending: true });
 
   if (error) throw new Error("Could not load pending registrations.");

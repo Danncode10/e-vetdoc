@@ -159,7 +159,7 @@ export function StaffManagement({ staff }: { staff: StaffMember[] }) {
             <Users className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs text-muted-foreground font-medium">Active Staff</p>
+            <p className="text-xs text-muted-foreground font-medium">Staff</p>
             <p className="text-xl font-bold text-foreground">{activeTotalCount}</p>
           </div>
         </div>
