@@ -55,7 +55,7 @@ for (const role of ['staff', 'admin'] as const) {
 
     await expect(card(page, online.email).getByTestId('owner-presence')).toHaveText('Online');
     await expect(card(page, offline.email).getByTestId('owner-presence')).toHaveText('Last seen 2d ago');
-    await expect(card(page, pending.email).getByTestId('owner-presence')).toHaveText('Never signed in');
+    await expect(card(page, pending.email).getByTestId('owner-presence')).toHaveText('Offline');
 
     await page.getByTestId('owner-filter-online').click();
     await expect(page.getByTestId('owner-filter-online')).toHaveAttribute('aria-pressed', 'true');

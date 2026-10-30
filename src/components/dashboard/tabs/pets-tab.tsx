@@ -283,7 +283,7 @@ export function PetsTab({ role }: { role: UserRole }) {
                   {role !== "owner" && pet.pet_owners && pet.pet_owners.length > 0 && (
                     <div className="pt-2 border-t border-border/60">
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                        Authorized Owners
+                        Pet Owners
                       </p>
                       <div className="space-y-1">
                         {pet.pet_owners.map((link: any) => (

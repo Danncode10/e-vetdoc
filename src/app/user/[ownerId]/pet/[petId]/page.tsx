@@ -109,11 +109,11 @@ export default async function PetRecordPage({
         </div>
       </dl>
 
-      {/* Authorized Owners Section */}
+      {/* Pet Owners Section */}
       <section aria-labelledby="owners-heading" className="space-y-3">
         <div className="flex items-center justify-between border-b border-border pb-2">
           <h2 id="owners-heading" className="text-base font-semibold text-foreground flex items-center gap-2">
-            <User className="size-4 text-primary" /> Authorized Owners
+            <User className="size-4 text-primary" /> Pet Owners
           </h2>
           <span className="text-xs text-muted-foreground font-medium">
             {pet.owners.length} {pet.owners.length === 1 ? "Owner" : "Owners"}

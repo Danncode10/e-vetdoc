@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { CancelModal } from "@/components/dashboard/appointments/cancel-modal";
 import { cancelAudienceFor } from "@/lib/cancellation-reasons";
+import { AutoCancelledBadge, AutoCancelledNotice } from "@/components/dashboard/appointments/auto-cancelled";
 
 function fmtDate(iso: string) {
   return new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric" }).format(new Date(iso));
@@ -348,7 +349,7 @@ export function AppointmentsTab({ role, userId }: { role: UserRole; userId: stri
               {paginatedAppointments.map((app) => {
                 const cfg = STATUS_CONFIG[app.status];
                 return (
-                  <div key={app.id} className="group relative flex flex-col rounded-2xl border border-border bg-card overflow-hidden transition-shadow hover:shadow-md">
+                  <div key={app.id} data-testid={`appointment-card-${app.id}`} className="group relative flex flex-col rounded-2xl border border-border bg-card overflow-hidden transition-shadow hover:shadow-md">
                     <div className={`h-0.5 w-full ${cfg?.stripe ?? "bg-muted"}`} />
 
                     <div className="p-5 flex-1">
@@ -361,7 +362,10 @@ export function AppointmentsTab({ role, userId }: { role: UserRole; userId: stri
                             {app.services?.name || "General Visit"}
                           </p>
                         </div>
-                        <StatusBadge status={app.status} />
+                        <div className="flex flex-col items-end gap-1.5">
+                          <StatusBadge status={app.status} />
+                          {app.auto_cancelled && <AutoCancelledBadge />}
+                        </div>
                       </div>
 
                       <div className="space-y-2 text-sm">
@@ -389,6 +393,7 @@ export function AppointmentsTab({ role, userId }: { role: UserRole; userId: stri
                             <span className="line-clamp-2 text-foreground/80">{app.reason}</span>
                           </div>
                         )}
+                        {app.auto_cancelled && <AutoCancelledNotice className="mt-2" />}
                       </div>
                     </div>
 
