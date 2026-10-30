@@ -1051,14 +1051,13 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      check_double_booking: {
-        Args: {
-          p_end: string
-          p_exclude_appointment_id?: string
-          p_start: string
-          p_veterinarian_id: string
-        }
-        Returns: boolean
+      clinic_member_names: {
+        Args: { p_ids: string[] }
+        Returns: {
+          full_name: string
+          id: string
+          role: Database["public"]["Enums"]["user_role"]
+        }[]
       }
       create_owned_pet: {
         Args: {
@@ -1092,6 +1091,20 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      quick_bill_appointment: {
+        Args: {
+          p_amount: number
+          p_appointment_id: string
+          p_description: string
+          p_is_vatable: boolean
+          p_method: Database["public"]["Enums"]["payment_method"]
+          p_reference?: string
+        }
+        Returns: {
+          invoice_id: string
+          receipt_number: string
+        }[]
       }
       touch_last_seen: { Args: never; Returns: undefined }
     }
