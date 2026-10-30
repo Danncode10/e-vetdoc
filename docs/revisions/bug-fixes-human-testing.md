@@ -28,7 +28,7 @@ Automated Playwright tests cover the same things (`tests/15`, `tests/17`, `tests
 
 **What changed:** the Owners tab lists **every** owner account (it never filtered by online
 before, but there was no way to tell who was online). Each card now shows **Online** (green dot)
-or **Last seen …** / **Never signed in**, and there are three filter buttons with counts:
+or **Last seen …** / **Offline** (never signed in), and there are three filter buttons with counts:
 **All owners · Online · Offline**. Accounts still waiting for approval show a
 **Pending approval** tag. Disapproved sign-ups are not listed.
 
@@ -42,7 +42,7 @@ every minute). It turns **Offline** about **3 minutes** after the tab is closed 
 | 1.3 | In the private window, sign in as **Owner A** and stay on the dashboard | — |
 | 1.4 | Back in the Staff window, wait up to 1 minute (the list refreshes itself) | Owner A's card shows a green dot and **Online**. **Online** count went up by 1. |
 | 1.5 | Click **Online** | Only online owners are listed (Owner A is there). |
-| 1.6 | Click **Offline** | Owner A is **not** listed; owners who are not signed in are, with **Last seen …** or **Never signed in**. |
+| 1.6 | Click **Offline** | Owner A is **not** listed; owners who are not signed in are, with **Last seen …** or **Offline** (never signed in). |
 | 1.7 | Click **All owners** | Everyone is back. Type part of a name in search: search works together with the filter. |
 | 1.8 | Close the Owner A window, wait ~4 minutes | Owner A moves to **Offline** with **Last seen Xm ago**. |
 | 1.9 | Repeat 1.1–1.6 signed in as **Admin** | Same results. |

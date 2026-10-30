@@ -124,6 +124,9 @@ top bar on phones).
 
 ### 4.2 Team management (Admin)
 - Add clinic members (Admin, Staff, Vet), change roles, activate/deactivate accounts.
+- Each member shows **Online** or **Offline** (with **Last seen …** when known), or
+  **Deactivated**; an **All / Online / Offline** filter with counts lists who is on right now.
+  Deactivated members always count as offline. The page refreshes every minute.
 - The system never allows removing the **last active Admin**.
 
 ### 4.3 Pets and owners
@@ -133,8 +136,9 @@ top bar on phones).
   for primary contact, permission to view medical records, and notifications.
 - **Owners directory** (clinic): every owner account with their pets and latest appointment,
   search, pagination, and an **All / Online / Offline** filter with counts. Each card shows
-  **Online**, **Last seen …**, or **Never signed in**, plus a **Pending approval** tag.
-- Owner profile page and per-pet record page for the clinic.
+  **Online**, **Last seen …**, or **Offline** (never signed in), plus a **Pending approval** tag.
+- Owner profile page and per-pet record page for the clinic. A pet's linked accounts are listed
+  under **Pet Owners**.
 
 ### 4.4 Schedules (clinic availability)
 - Admin/Staff create **schedules per date**: start time, end time, **max capacity** (bookings per
@@ -154,6 +158,11 @@ top bar on phones).
 - Cancellation frees the place immediately. Owners choose personal reasons ("I need to
   reschedule", "My pet is unwell / not ready", "Other"); Admin/Staff choose clinic reasons
   ("Clinic emergency", "No veterinarian available", "Bad weather", "Other"). Vets cannot cancel.
+- **Automatic cancellation:** a booking the clinic never acted on (still Booked, no encounter
+  started) is cancelled by the system once its date has passed (Asia/Manila). It shows
+  **Cancelled** plus an **Auto-cancelled** tag and the note *"Cancelled automatically by the
+  system: the appointment date passed before the clinic accepted the booking."* on the list and
+  the detail page; the Logs tab records **System** as the actor.
 - Appointments list with search, status filter (Booked, Diagnosed, Paid, Cancelled), date filter;
   appointment detail page with pet, owner, service, history, and actions; printable details.
 
@@ -319,7 +328,7 @@ erDiagram
 | `pet_owners` | Owner ↔ pet links (many-to-many) | relationship, is_primary_contact, can_view_medical_records, can_receive_notifications |
 | `services` | Clinic service catalog | name, category, price_from/to, duration, is_published |
 | `appointment_schedules` | Clinic availability per date | specific_date, start/end time, max_capacity, is_closed, status |
-| `appointments` | Bookings | pet, owner, service, status, preferred_date/time (clinic-local), scheduled_start/end, reason, notes, cancellation_reason, timestamps |
+| `appointments` | Bookings | pet, owner, service, status, preferred_date/time (clinic-local), scheduled_start/end, reason, notes, cancellation_reason, auto_cancelled, timestamps |
 | `appointment_status_history` | Every status change | previous/new status, changed_by, reason |
 | `encounters` | One consultation per appointment | pet, veterinarian, status (draft/signed), signed_at |
 | `clinical_notes` | SOAP note | chief_complaint, subjective, objective, assessment, plan |
@@ -366,7 +375,8 @@ erDiagram
 | `sync_profile_from_auth_user` | trigger | Keeps profile email/name in sync with the login |
 | `guard_profile_approval_fields` | trigger | Blocks self-approval and role tampering |
 | `prevent_removing_final_active_admin` | trigger | Keeps at least one active Admin |
-| `log_appointment_status_change` | trigger | Writes appointment status history |
+| `log_appointment_status_change` | trigger | Writes appointment status history (system cancellations: no actor, reason `auto_cancelled`) |
+| `guard_auto_cancelled` | trigger | Only the overdue sweep may set `auto_cancelled`; other writes to it are ignored |
 | `log_profile_update`, `log_auth_credentials_update` | triggers | Account Changes log (profile fields, email, password) |
 | `mark_appointment_paid` | trigger | A paid invoice linked to a visit marks the appointment Paid |
 | `generate_invoice_number`, `generate_receipt_number` | triggers | `INV-YYYY-######`, `RCPT-YYYY-######` |
@@ -374,6 +384,7 @@ erDiagram
 | `quick_bill_appointment()` | function (RPC) | All-or-nothing "Charge & Mark Paid"; refuses double billing |
 | `create_owned_pet()` | function (RPC) | Owner adds a pet and is linked to it in one step |
 | `touch_last_seen()` | function (RPC) | Presence heartbeat for Online/Offline |
+| `cancel_overdue_appointments()` | function (RPC) | Cancels booked visits whose date passed with no encounter; runs on every appointments/dashboard load and hourly if pg_cron is enabled |
 | `clinic_member_names()` | function (RPC) | Returns only names/roles of clinic members (privacy) |
 | `consume_captcha_challenge()` | function (server only) | Marks a solved captcha challenge as used; refuses reuse |
 
@@ -400,6 +411,7 @@ Vercel):**
 | `19-audit-fixes` | Database refuses tampering per role; billing safety; schedule rules; vet screens |
 | `20-captcha` | Captcha image not readable as text, wrong/empty answers, honeypot, single use (replay rejected), forgot-password protected |
 | `21-captcha-abuse` | Expired and tampered challenges rejected, spam burst creates at most one account, honeypot |
+| `22-autocancel-team-presence` | "Pet Owners" label; overdue bookings auto-cancel (started and future ones do not), indicator on list/detail, System in Logs, flag cannot be forged; Team Online/Offline badges and filter |
 
 Latest full run: **all tests passed** (see the PR for the exact count), production build passes,
 no new lint findings. **Manual guides:** `docs/revisions/bug-fixes-human-testing.md`,
@@ -434,7 +446,8 @@ see `docs/revisions/audit-report-oct-30.md`.
 3. Deactivated or unapproved accounts lose access immediately (checked in every rule).
 4. Bookings are confirmed instantly while a slot has room; capacity = schedule's max capacity;
    cancelled and no-show bookings do not count.
-5. Only upcoming bookings can be cancelled; vets cannot cancel.
+5. Only upcoming bookings can be cancelled; vets cannot cancel. A booking still untouched (no
+   encounter) after its date has passed is cancelled automatically by the system.
 6. One encounter per appointment, started only from a booked appointment.
 7. Signed records are never edited — only amended.
 8. Signing an encounter marks the appointment Diagnosed; paying marks it Paid.
@@ -449,7 +462,7 @@ see `docs/revisions/audit-report-oct-30.md`.
 
 - **Account:** `pending` → `approved` | `rejected` (plus `is_active` on/off).
 - **Appointment (as used):** `booked` → `diagnosed` (encounter signed) → `paid`;
-  or `booked` → `cancelled`. (The database also defines legacy values — requested, scheduled,
+  or `booked` → `cancelled` (by a person, or automatically by the system once the date passes). (The database also defines legacy values — requested, scheduled,
   confirmed, completed, finished, no_show — kept for older data.)
 - **Encounter:** `draft` → `signed` (+ amendments).
 - **Invoice:** `draft` → `unpaid` → `partial` → `paid`; `draft`/`unpaid` → `voided`.
@@ -479,6 +492,7 @@ see `docs/revisions/audit-report-oct-30.md`.
 | Oct 30, 2026 — PR #9 | Owners directory lists all owners with Online/Offline filter; account change logs; full days blocked on calendar; login redirect fix |
 | Oct 30, 2026 — audit | Security/consistency audit (21 items) fixed: booking bypass, forged history, vet schedule/billing access, staff privacy, encounter rules, safe one-step billing, schedule validation, counts, cleanup |
 | Oct 30, 2026 — captcha | Spam check always on in production: built-in math captcha + honeypot on sign-up and forgot password (Turnstile optional); login page fits phones |
+| Oct 30, 2026 — fixes | "Authorized Owners" renamed "Pet Owners"; overdue bookings auto-cancel with an Auto-cancelled indicator; Team tab Online/Offline badges + filter; Owners tab shows "Offline" instead of "Never signed in"; copy-paste SQL to delete an account (`docs/supabase/delete-account-by-email.sql`) |
 
 ## 17. Glossary
 
@@ -503,6 +517,7 @@ see `docs/revisions/audit-report-oct-30.md`.
 | `docs/revisions/audit-report-oct-30.md` | Audit findings and fix log |
 | `docs/revisions/audit-fixes-human-testing.md` | Manual tests for the audit fixes |
 | `docs/revisions/captcha.md` | Spam protection: how it works, rollout, manual tests |
+| `docs/supabase/delete-account-by-email.sql` | Copy-paste SQL (not a migration) that permanently deletes one account and all of its data |
 | `docs/handover/*` | Earlier handover notes (MVP era; this file supersedes their flow descriptions) |
 | `PROJECT_CONTEXT.md` | Original product decisions (MVP era; roles updated here) |
 | `supabase/migrations/` | Database history (source of truth for schema) |
