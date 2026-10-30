@@ -96,6 +96,8 @@ export async function loginThroughUi(page: Page, email: string, password: string
   await page.goto('/login');
   // The dev server compiles pages on first visit, so allow a slow first paint.
   await page.locator('#email').waitFor({ timeout: 60000 });
+  // Wait for hydration so the submit runs the sign-in handler, not a plain form post.
+  await page.waitForLoadState('networkidle');
   await page.locator('#email').fill(email);
   await page.locator('#password').fill(password);
   await page.locator('button[type="submit"]').click();

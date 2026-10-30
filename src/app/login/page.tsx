@@ -146,8 +146,9 @@ export default function AuthPage() {
           setSuccess(true);
           setTimeout(() => {
             toast.success('Login successful!');
+            // No router.refresh() here: refreshing in the same tick could cancel the
+            // navigation and leave the user on a blank login page.
             router.push('/dashboard');
-            router.refresh();
           }, 800);
         }
       } else {
