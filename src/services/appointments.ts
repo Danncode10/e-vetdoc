@@ -2,6 +2,7 @@
 
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
+import { asActionResult } from "@/lib/action-result";
 import { ADMIN_STAFF_ROLES, isAdminOrStaff, requireAuth, requireRole } from "@/services/authorization";
 import { fillClinicNames } from "@/services/clinic-names";
 import type {
@@ -177,7 +178,7 @@ async function requireAppointmentManager(options: { allowOwner?: boolean } = {})
 const CANCELLABLE_STATUSES = ["booked", "requested", "scheduled", "confirmed"] as const;
 
 /** Admin / Staff approve a pending request; the database enforces the slot's capacity. */
-export async function approveAppointment(id: string) {
+async function approveAppointmentOrThrow(id: string) {
   await requireAppointmentManager();
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("approve_appointment", { p_appointment_id: id });
@@ -241,7 +242,7 @@ export async function getPendingSlotUsage(): Promise<Record<string, SlotUsage>> 
   return usage;
 }
 
-export async function cancelAppointment(id: string, reason?: string) {
+async function cancelAppointmentOrThrow(id: string, reason?: string) {
   // Owners may cancel their own bookings; RLS limits them to their own rows.
   const profile = await requireAppointmentManager({ allowOwner: true });
   const allowedReasons = CANCEL_REASONS[cancelAudienceFor(profile.role)].map((r) => r.value);
@@ -286,7 +287,7 @@ export async function listOwnerAppointments(ownerId: string) {
   return data;
 }
 
-export async function requestAppointment(input: Omit<AppointmentInsert, 'owner_id' | 'id'>) {
+async function requestAppointmentOrThrow(input: Omit<AppointmentInsert, 'owner_id' | 'id'>) {
   await requireAuth();
   // Validate that the pet_id in input is linked to the owner's profile
   const pets = await listPetsForCurrentUser();
@@ -397,7 +398,7 @@ function scheduleErrorMessage(error: { code?: string; message?: string }, fallba
   return error.message || fallback;
 }
 
-export async function createAppointmentSchedule(input: {
+async function createAppointmentScheduleOrThrow(input: {
   specific_date: string; // ISO date string "YYYY-MM-DD", optional for recurring
   start_time: string;
   end_time: string;
@@ -463,7 +464,7 @@ export async function createAppointmentSchedule(input: {
   return data;
 }
 
-export async function updateAppointmentSchedule(
+async function updateAppointmentScheduleOrThrow(
   id: string,
   input: {
     specific_date?: string;
@@ -546,7 +547,7 @@ export async function updateAppointmentSchedule(
   return data;
 }
 
-export async function deleteAppointmentSchedule(id: string) {
+async function deleteAppointmentScheduleOrThrow(id: string) {
   const user = await requireScheduleManager();
   const supabase = await createClient();
 
@@ -718,4 +719,29 @@ async function cancelAppointmentsForSchedule(schedule: Record<string, unknown>) 
       })
       .in("id", toCancelIds);
   }
+}
+
+// Actions called from forms and buttons: they return { data } or { error } (see lib/action-result).
+export async function requestAppointment(input: Omit<AppointmentInsert, "owner_id" | "id">) {
+  return asActionResult(() => requestAppointmentOrThrow(input));
+}
+
+export async function approveAppointment(id: string) {
+  return asActionResult(() => approveAppointmentOrThrow(id));
+}
+
+export async function cancelAppointment(id: string, reason?: string) {
+  return asActionResult(() => cancelAppointmentOrThrow(id, reason));
+}
+
+export async function createAppointmentSchedule(input: Parameters<typeof createAppointmentScheduleOrThrow>[0]) {
+  return asActionResult(() => createAppointmentScheduleOrThrow(input));
+}
+
+export async function updateAppointmentSchedule(id: string, input: Parameters<typeof updateAppointmentScheduleOrThrow>[1]) {
+  return asActionResult(() => updateAppointmentScheduleOrThrow(id, input));
+}
+
+export async function deleteAppointmentSchedule(id: string) {
+  return asActionResult(() => deleteAppointmentScheduleOrThrow(id));
 }

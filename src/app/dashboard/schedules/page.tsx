@@ -291,7 +291,8 @@ function SchedulesCalendarPage({ canManage }: { canManage: boolean }) {
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this schedule?")) return;
     try {
-      await deleteAppointmentSchedule(id);
+      const deleteAppointmentScheduleResult = await deleteAppointmentSchedule(id);
+      if (deleteAppointmentScheduleResult.error) throw new Error(deleteAppointmentScheduleResult.error);
       await fetchSchedules();
       toast.success("Schedule deleted successfully");
     } catch (error: any) {

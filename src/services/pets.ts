@@ -4,6 +4,7 @@ import { createClient } from "@/utils/supabase/server";
 import { Tables, TablesInsert, TablesUpdate } from "@/types/supabase";
 import { isAdminOrStaff, isClinicMember, requireAuth } from "@/services/authorization";
 import { revalidatePath } from "next/cache";
+import { asActionResult } from "@/lib/action-result";
 
 export type Pet = Tables<"pets">;
 export type PetInsert = TablesInsert<"pets">;
@@ -346,7 +347,7 @@ export async function searchPets(query: string, limit = 20) {
  * sole-owned pets, appointments, clinical records, invoices). Shared pets are kept.
  * The database function `admin_delete_owner()` checks the role and runs in one transaction.
  */
-export async function deleteOwnerCompletely(ownerId: string) {
+async function deleteOwnerCompletelyOrThrow(ownerId: string) {
   const { profile } = await requireAuth();
   if (profile.role !== "admin") throw new Error("Only an Administrator can delete owner accounts.");
   const supabase = await createClient();
@@ -354,4 +355,8 @@ export async function deleteOwnerCompletely(ownerId: string) {
   if (error) throw new Error(error.message);
   revalidatePath("/dashboard");
   return { email: data };
+}
+
+export async function deleteOwnerCompletely(ownerId: string) {
+  return asActionResult(() => deleteOwnerCompletelyOrThrow(ownerId));
 }

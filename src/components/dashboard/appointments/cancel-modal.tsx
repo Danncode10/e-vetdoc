@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { toast } from "sonner";
 import { XCircle, Stethoscope, Calendar, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CANCEL_REASONS, type CancelAudience } from "@/lib/cancellation-reasons";
@@ -36,6 +37,8 @@ export function CancelModal({ appointment, audience = "owner", onConfirm, onClos
     setIsPending(true);
     try {
       await onConfirm(reason);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not cancel this appointment.");
     } finally {
       setIsPending(false);
     }

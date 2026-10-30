@@ -472,7 +472,7 @@ export function AppointmentRequestForm() {
       const [endH, endM] = selectedSlot!.end.split(":").map(Number);
       slotEnd.setHours(endH, endM, 0, 0);
 
-      await requestAppointment({
+      const requestAppointmentResult = await requestAppointment({
         pet_id: formData.petId,
         service_id: formData.serviceId,
         preferred_date: formData.preferredDate,
@@ -482,6 +482,7 @@ export function AppointmentRequestForm() {
         reason: formData.reason,
         notes: formData.notes,
       });
+      if (requestAppointmentResult.error) throw new Error(requestAppointmentResult.error);
       toast.success("Appointment requested! The clinic will approve it soon.");
       router.push("/dashboard?tab=appointments");
       router.refresh();
