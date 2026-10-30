@@ -388,7 +388,7 @@ erDiagram
 | `log_profile_update`, `log_auth_credentials_update` | triggers | Account Changes log (profile fields, email, password) |
 | `mark_appointment_paid` | trigger | A paid invoice linked to a visit marks the appointment Paid |
 | `generate_invoice_number`, `generate_receipt_number` | triggers | `INV-YYYY-######`, `RCPT-YYYY-######` |
-| `book_appointment()` | function (RPC) | Owner request (`requested`): same-day until slot end, one per owner per day, refused when approved places are full |
+| `book_appointment()` | function (RPC) | Owner request (`requested`): same-day until slot end, each pet once per day, refused when approved places are full |
 | `admin_delete_owner()` | function (RPC) | Admin only: deletes an owner account and all of its data in one transaction |
 | `approve_appointment()` | function (RPC) | Admin/Staff approve a request (→ `booked`) within the slot capacity |
 | `guard_appointment_approval`, `guard_encounter_requires_approval` | triggers | Pending requests can only become approved through Approve; encounters need an approved visit |
