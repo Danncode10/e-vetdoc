@@ -7,7 +7,8 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { Mail, Lock, User, Eye, EyeOff, ArrowRight, Loader2, Check } from 'lucide-react';
-import { TurnstileWidget } from '@/components/auth/turnstile-widget';
+import { SpamCheck } from '@/components/auth/spam-check';
+import type { CaptchaSubmission } from '@/lib/captcha';
 import { REGISTRATION_ROLES, type UserRole } from '@/lib/roles';
 
 type AuthMode = 'login' | 'signup' | 'recovery';
@@ -59,7 +60,7 @@ export default function AuthPage() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [requestedRole, setRequestedRole] = useState<UserRole>('owner');
-  const [captchaToken, setCaptchaToken] = useState('');
+  const [captcha, setCaptcha] = useState<CaptchaSubmission>({ token: '' });
   const [captchaKey, setCaptchaKey] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -107,7 +108,8 @@ export default function AuthPage() {
     setPassword('');
     setName('');
     setRequestedRole('owner');
-    setCaptchaToken('');
+    setCaptcha({ token: '' });
+    setCaptchaKey(k => k + 1);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -129,11 +131,29 @@ export default function AuthPage() {
       return;
     }
 
+    if (mode !== 'login') {
+      if (!captcha.token) {
+        setError('Please wait for the spam check to load.');
+        return;
+      }
+      if (captcha.answer !== undefined && !captcha.answer.trim()) {
+        setError('Answer the spam check question.');
+        return;
+      }
+    }
+
     setLoading(true);
+
+    // Spam-check challenges are single use, so show a fresh one after every attempt.
+    const refreshCaptcha = () => {
+      setCaptcha({ token: '' });
+      setCaptchaKey(k => k + 1);
+    };
 
     try {
       if (mode === 'recovery') {
-        const result = await forgotPasswordRateLimited(email, `${window.location.origin}/reset-password`);
+        const result = await forgotPasswordRateLimited(email, `${window.location.origin}/reset-password`, captcha);
+        refreshCaptcha();
         if (result.error) throw new Error(result.error);
         setResetSentTo(email);
         toast.success('Reset email sent', { description: `Check ${email} for the setup link.` });
@@ -158,14 +178,10 @@ export default function AuthPage() {
           window.location.origin,
           name.trim(),
           requestedRole,
-          captchaToken,
+          captcha,
         );
-        if (result.error) {
-          // Captcha tokens are single-use, so get a fresh one for the next attempt.
-          setCaptchaToken('');
-          setCaptchaKey(k => k + 1);
-          throw new Error(result.error);
-        }
+        refreshCaptcha();
+        if (result.error) throw new Error(result.error);
         setSuccess(true);
         setTimeout(() => {
           toast.success('Account created!', { description: 'Confirm your email, then wait for clinic approval.' });
@@ -221,7 +237,8 @@ export default function AuthPage() {
       }} />
 
       {/* Glows */}
-      <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0 }}>
+      {/* overflow hidden: the blurred glows would otherwise widen the page on phones */}
+      <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0, overflow: 'hidden' }}>
         <div style={{
           position: 'absolute',
           top: '-10%',
@@ -762,7 +779,7 @@ export default function AuthPage() {
                   </div>
                 )}
 
-                {mode === 'signup' && <TurnstileWidget key={captchaKey} onToken={setCaptchaToken} />}
+                {mode !== 'login' && <SpamCheck key={captchaKey} onChange={setCaptcha} />}
 
                 {error && (
                   <div style={{
