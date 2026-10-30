@@ -399,6 +399,7 @@ Vercel):**
 | `18-account-logs` | Profile and password changes logged and visible to Admin/Staff |
 | `19-audit-fixes` | Database refuses tampering per role; billing safety; schedule rules; vet screens |
 | `20-captcha` | Captcha image not readable as text, wrong/empty answers, honeypot, single use (replay rejected), forgot-password protected |
+| `21-captcha-abuse` | Expired and tampered challenges rejected, spam burst creates at most one account, honeypot |
 
 Latest full run: **all tests passed** (see the PR for the exact count), production build passes,
 no new lint findings. **Manual guides:** `docs/revisions/bug-fixes-human-testing.md`,
