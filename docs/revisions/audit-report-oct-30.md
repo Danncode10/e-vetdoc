@@ -4,9 +4,46 @@ Branch: `audit-fixes` (based on `bug-fixes` / PR #9, so it checks the newest cod
 Scope: database security rules (RLS), database functions/triggers, server code in `src/services`,
 page access guards, the main dashboard screens, and Supabase's built-in advisors.
 
-**Status: report only — nothing is fixed yet.** Each item has a recommended fix. Items marked
-**Confirmed** were reproduced against the e-vetdoc test database with real test accounts (the
-test rows were deleted afterwards).
+**Status: all 21 items fixed** (+2 found while fixing: L9 needs a password change, L10 documented) on branch `audit-fixes` (see the fix log below). Items marked
+**Confirmed** were reproduced against the e-vetdoc test database with real test accounts before
+fixing (the test rows were deleted afterwards). Decisions taken: vets can **view** schedules but
+not change them; billing is **Admin + Staff only**.
+
+## Fix log
+
+Database changes: `supabase/migrations/20261030130000_audit_fixes.sql` (applied to the test
+project). Automated tests: `tests/19-audit-fixes.spec.ts` (+ updated `tests/11`). Manual checks:
+`docs/revisions/audit-fixes-human-testing.md`.
+
+| # | Status | What changed | Test |
+|---|--------|--------------|------|
+| H1 | ✅ Fixed | Dropped the direct-insert policy; owners can only book through `book_appointment()`. Unused `createAppointment()` removed. | `19` H1 |
+| H2 | ✅ Fixed | Dropped the open insert policy on `appointment_status_history`; only the trigger writes history. | `19` H2 |
+| H3 | ✅ Fixed | Old clinic-wide write policy dropped; schedule functions require Admin/Staff; Schedule tab is read-only for vets ("View only" note, no add/edit/delete); `/dashboard/schedules/new` guarded. | `19` H3 (DB + screens) |
+| H4 | ✅ Fixed | `startEncounterForAppointment()` reuses an existing encounter and only starts one for **booked** visits; unique index `encounters_one_per_appointment`; signing only turns **booked** → Diagnosed; button hidden for other statuses; errors shown as a toast. | `19` H4 (DB + screen) |
+| M1 | ✅ Fixed | Broad profile policy replaced: clinic members see each other; owners get names only via `clinic_member_names()` (`src/services/clinic-names.ts` fills vet names on owner screens). | `19` M1 |
+| M2 | ✅ Fixed | Invoices, items, payments = Admin/Staff (database + billing pages + services); Billing tab hidden for vets; "Charge & Mark Paid" hidden for vets. | `19` M2 (DB + screens), `11` |
+| M3 | ✅ Fixed | Trigger `mark_appointment_paid`: any invoice linked to a visit's encounter that becomes Paid marks the appointment Paid. Note: the Billing → New invoice screen does not link invoices to visits; visits are billed with "Charge & Mark Paid". | `19` M3 |
+| M4 | ✅ Fixed | Owner overview: only `booked` visits from today on, soonest first. | `19` M4 |
+| M5 | ✅ Fixed | `listPetsForCurrentUser()`: no 100-row cap; explicit owner filter for owners. | covered by Pets tab specs |
+| M6 | ✅ Fixed | Prescription delete/insert errors in `saveEncounterDraft()` now stop the save with a clear message. | code review |
+| M7 | ✅ Fixed | Active appointments = booked + diagnosed (awaiting payment); Pet Owners excludes disapproved sign-ups (same as Owners tab). Staff also see the "Audit Logs" quick action. | code review |
+| M8 | ✅ Fixed | New `quick_bill_appointment()` database function: one transaction, Admin/Staff only, refuses unsigned or already-paid appointments, server-computed VAT. | `19` M8 |
+| M9 | ✅ Fixed | Server validation + DB checks: end after start, capacity ≥ 1, one active schedule per date + start time (`appointment_schedules_one_per_slot`), friendly error messages. | `19` M9 |
+| L1 | ✅ Fixed | Removed `createAppointment`, `updateAppointment`, `scheduleAppointment`, `rescheduleAppointment`, `completeAppointment`, `markNoShow`, `getAppointmentStatusHistory`, `listPetAppointments`, `getVeterinarianSchedule`, `createEncounter`, and the `check_double_booking()` DB function. Cancelling now only works on upcoming bookings. | full suite |
+| L2 | ✅ Fixed | Duplicate schedule read/write policies and the "all services public" policy removed. | `19` H3 |
+| L3 | ✅ Fixed | Removed `/dashboard/pages`, `getGithubRepos()`, `creatorRepos`, `getVibeCheckData*()`. | build |
+| L4 | ✅ Fixed | Landing copy: "Book a visit … confirmed instantly", "appointment booked". | — |
+| L5 | ✅ Fixed (1 optional) | Fixed `search_path` on 3 functions; trigger functions no longer callable over the API; RPCs not callable anonymously. *Leaked-password protection is a Supabase dashboard setting (paid plans) — left as optional.* | advisor |
+| L6 | ✅ Fixed | 13 foreign-key indexes added. | advisor |
+| L7 | ✅ Fixed | Last-admin guard counts only approved, active admins; clearer message. | — |
+| L8 | ✅ Fixed | `isStaff()` renamed `isClinicMember()`. | type-check |
+| L9 | ⚠️ Partly fixed — **action needed** | *Found while fixing.* The old test flows (`tests/flows/booking.ts`, `clinical.ts`) contained a hard-coded fallback password that still works for the test **admin** and **owner** accounts of the e-vetdoc test database, and it is in the public git history. Fallbacks removed (tests now read only `.env.local`). **Change those two passwords** (and on Vinz's database too if the same test accounts exist there), then update `.env.local`. | — |
+| L10 | Not fixed (documented) | *Found while fixing.* Sign-in redirects to `/auth/mfa` when two-factor auth is required, but that page does not exist. Harmless today because MFA is not enabled; listed under limitations in `OVERALL.md`. | — |
+
+> **Production rollout:** run `supabase db push` on Vinz's project **before** merging. The
+> migration only adds the two uniqueness rules if existing data already satisfies them; otherwise
+> it prints a NOTICE naming what to clean up (the app still blocks duplicates either way).
 
 Severity: **High** = breaks a rule the client asked for or lets a user tamper with data.
 **Medium** = wrong data / confusing behaviour users will notice. **Low** = cleanup, wording,
@@ -167,11 +204,11 @@ future-proofing.
   approvals or payments.
 - Owners see only their own pets, appointments, invoices.
 
-## Decisions needed before fixing
+## Decisions (taken)
 1. **Schedules for vets** — recommended: vets can **view** the schedule but not create/edit it.
 2. **Billing for vets** — recommended: **no billing for vets** (Admin + Staff only).
 
-## Proposed fix plan (after approval)
+## Fix plan (done)
 | Step | Items | Tests |
 |------|-------|-------|
 | 1 Database rules | H1, H2, H3, M1, M2, L2, L5, L6, L7, H4 (unique index), M9 (checks) | DB tests per role (like `tests/10`) |
