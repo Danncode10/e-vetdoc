@@ -464,6 +464,85 @@ async function createAppointmentScheduleOrThrow(input: {
   return data;
 }
 
+/** Most dates one bulk request may create (about three months of daily schedules). */
+const MAX_BULK_SCHEDULE_DATES = 92;
+
+/**
+ * Create the same schedule (times, capacity, open/closed) on many dates at once.
+ * Past dates and dates whose existing schedule overlaps these times are skipped, not failed.
+ */
+async function createAppointmentSchedulesBulkOrThrow(input: {
+  dates: string[]; // "YYYY-MM-DD"
+  start_time: string;
+  end_time: string;
+  max_capacity: number;
+  is_closed?: boolean;
+}) {
+  const user = await requireScheduleManager();
+  validateSchedule(input);
+
+  const dates = [...new Set(input.dates)].filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+  if (dates.length === 0) throw new Error("Choose at least one date.");
+  if (dates.length > MAX_BULK_SCHEDULE_DATES) {
+    throw new Error(`Choose at most ${MAX_BULK_SCHEDULE_DATES} dates at a time.`);
+  }
+
+  const toSeconds = (t: string) => (/^\d{2}:\d{2}$/.test(t) ? `${t}:00` : t);
+  const start = toSeconds(input.start_time);
+  const end = toSeconds(input.end_time);
+  const today = clinicNow().date;
+
+  const supabase = await createClient();
+  const { data: existing, error: existingError } = await supabase
+    .from("appointment_schedules")
+    .select("specific_date, start_time, end_time")
+    .eq("status", "active")
+    .in("specific_date", dates);
+  if (existingError) throw new Error(scheduleErrorMessage(existingError, "Could not check existing schedules."));
+
+  const skipped: Array<{ date: string; reason: string }> = [];
+  const toCreate = dates.filter((date) => {
+    if (date < today) {
+      skipped.push({ date, reason: "past date" });
+      return false;
+    }
+    const overlaps = (existing ?? []).some(
+      (s) => s.specific_date === date && start.slice(0, 5) < s.end_time.slice(0, 5) && end.slice(0, 5) > s.start_time.slice(0, 5),
+    );
+    if (overlaps) {
+      skipped.push({ date, reason: "already has a schedule at these times" });
+      return false;
+    }
+    return true;
+  });
+
+  if (toCreate.length === 0) return { created: [] as string[], skipped };
+
+  const { data, error } = await supabase
+    .from("appointment_schedules")
+    .insert(
+      toCreate.map((date) => ({
+        specific_date: date,
+        start_time: start,
+        end_time: end,
+        max_capacity: input.max_capacity,
+        day_of_week: new Date(`${date}T00:00:00Z`).getUTCDay(),
+        is_recurring: false,
+        is_closed: input.is_closed ?? false,
+        status: "active" as const,
+      })),
+    )
+    .select();
+  if (error) throw new Error(scheduleErrorMessage(error, "Failed to create schedules"));
+
+  await supabase.from("schedule_audit_logs").insert(
+    data.map((row) => ({ actor_id: user.id, target_schedule_id: row.id, action: "created", next_values: row })),
+  );
+
+  revalidatePath("/dashboard/schedules");
+  return { created: data.map((row) => String(row.specific_date)), skipped };
+}
+
 async function updateAppointmentScheduleOrThrow(
   id: string,
   input: {
@@ -744,4 +823,7 @@ export async function updateAppointmentSchedule(id: string, input: Parameters<ty
 
 export async function deleteAppointmentSchedule(id: string) {
   return asActionResult(() => deleteAppointmentScheduleOrThrow(id));
+}
+export async function createAppointmentSchedulesBulk(input: Parameters<typeof createAppointmentSchedulesBulkOrThrow>[0]) {
+  return asActionResult(() => createAppointmentSchedulesBulkOrThrow(input));
 }

@@ -146,6 +146,10 @@ top bar on phones).
 ### 4.4 Schedules (clinic availability)
 - Admin/Staff create **schedules per date**: start time, end time, **max capacity** (bookings per
   day/slot), open or closed.
+- **Many dates at once:** Add Schedule offers **Single date**, **Multiple dates** (pick days one by
+  one) or **Date range** (from–to with weekday toggles, Mon–Sat by default), up to 92 dates. A
+  preview lists the dates; dates that already have a schedule at those times (or are past) are
+  skipped and reported.
 - Calendar view (green = open, orange = closed). Vets see it read-only.
 - Closing a date or changing its time automatically cancels the bookings it no longer covers.
 - Rules: end must be after start, capacity at least 1, one schedule per date and start time.
@@ -423,6 +427,7 @@ Vercel):**
 | `20-captcha` | Captcha image not readable as text, wrong/empty answers, honeypot, single use (replay rejected), forgot-password protected |
 | `21-captcha-abuse` | Expired and tampered challenges rejected, spam burst creates at most one account, honeypot |
 | `23-same-day-once-per-day`, `24-appointment-approval`, `25-admin-delete-owner` | Same-day booking, ended slots, each pet once per day (other pet allowed; simultaneous); pending → approve by Staff/Admin, vet greyed out, limit 3 enforced, encounter locked until approved |
+| `26-schedule-form-errors`, `27-schedule-multiple-dates` | Clear error when end is before start (production build); date range with weekdays, multiple dates, skipped overlaps, single date unchanged |
 | `22-autocancel-team-presence` | "Pet Owners" label; overdue bookings auto-cancel (started and future ones do not), indicator on list/detail, System in Logs, flag cannot be forged; Team Online/Offline badges and filter |
 
 Latest full run: **all tests passed** (see the PR for the exact count), production build passes,
@@ -504,6 +509,7 @@ see `docs/revisions/audit-report-oct-30.md`.
 | Oct 30, 2026 — PR #9 | Owners directory lists all owners with Online/Offline filter; account change logs; full days blocked on calendar; login redirect fix |
 | Oct 30, 2026 — audit | Security/consistency audit (21 items) fixed: booking bypass, forged history, vet schedule/billing access, staff privacy, encounter rules, safe one-step billing, schedule validation, counts, cleanup |
 | Oct 30, 2026 — captcha | Spam check always on in production: built-in math captcha + honeypot on sign-up and forgot password (Turnstile optional); login page fits phones |
+| Oct 30, 2026 — schedules | Clear error messages on the live site; Add Schedule for multiple dates or a date range |
 | Oct 30, 2026 — approval | Same-day booking, each pet once per day, Admin can delete an owner and all data from the Owners tab, Admin/Staff approval with capacity limit, encounters locked until approved, email templates bundled for Vercel |
 | Oct 30, 2026 — fixes | "Authorized Owners" renamed "Pet Owners"; overdue bookings auto-cancel with an Auto-cancelled indicator; Team tab Online/Offline badges + filter; Owners tab shows "Offline" instead of "Never signed in"; copy-paste SQL to delete an account (`docs/supabase/delete-account-by-email.sql`) |
 
