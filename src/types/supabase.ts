@@ -768,6 +768,7 @@ export type Database = {
           full_name: string | null
           id: string
           is_active: boolean
+          last_seen_at: string | null
           phone: string | null
           requested_role: Database["public"]["Enums"]["user_role"] | null
           role: Database["public"]["Enums"]["user_role"] | null
@@ -784,6 +785,7 @@ export type Database = {
           full_name?: string | null
           id: string
           is_active?: boolean
+          last_seen_at?: string | null
           phone?: string | null
           requested_role?: Database["public"]["Enums"]["user_role"] | null
           role?: Database["public"]["Enums"]["user_role"] | null
@@ -800,6 +802,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           is_active?: boolean
+          last_seen_at?: string | null
           phone?: string | null
           requested_role?: Database["public"]["Enums"]["user_role"] | null
           role?: Database["public"]["Enums"]["user_role"] | null
@@ -1090,6 +1093,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      touch_last_seen: { Args: never; Returns: undefined }
     }
     Enums: {
       appointment_mode: "in_person" | "virtual"
