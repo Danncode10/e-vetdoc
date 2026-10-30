@@ -5,6 +5,8 @@ const productLinks = [
   { label: "Pet records", href: "/#features" },
   { label: "Invoices", href: "/#features" },
   { label: "Owner portal", href: "/#pricing" },
+  { label: "About us", href: "/#about" },
+  { label: "Contact us", href: "/#contact" },
 ];
 
 export function Footer() {
