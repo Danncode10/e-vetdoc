@@ -563,7 +563,9 @@ export default function AuthPage() {
                 </p>
               </div>
             ) : (
-              <form key={formKey} onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              // method=post: if the page is not interactive yet, a plain submit must never put the
+              // email and password in the URL (browser history, server logs).
+              <form key={formKey} method="post" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {mode === 'signup' && (
                   <fieldset style={{ border: 'none', margin: 0, padding: 0, animation: 'slideIn 0.25s ease both' }}>
                     <legend style={{ display: 'block', fontSize: 11, fontWeight: 600, letterSpacing: 0.08, textTransform: 'uppercase', color: 'var(--color-muted-foreground)', marginBottom: 6, padding: 0 }}>
