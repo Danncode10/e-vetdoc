@@ -22,6 +22,8 @@ const navLinks = [
   { label: "Features", href: "/#features" },
   { label: "How it works", href: "/#how-it-works" },
   { label: "For pet owners", href: "/#pricing" },
+  { label: "About us", href: "/#about" },
+  { label: "Contact us", href: "/#contact" },
 ];
 
 export function Navbar({ user }: { user: User | null }) {

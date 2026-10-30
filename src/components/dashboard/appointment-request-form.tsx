@@ -10,6 +10,10 @@ import {
   Loader2,
   PawPrint,
   Stethoscope,
+  Syringe,
+  Pill,
+  Scissors,
+  CircleEllipsis,
   CalendarDays,
   Clock,
   FileText,
@@ -32,7 +36,27 @@ import { useEffect, useState } from "react";
 // ──────────────────────────────────────────────────────────────
 
 type PetOption = { id: string; name: string; species?: string | null; breed?: string | null };
-type ServiceOption = { id: string; name: string; duration_minutes?: number | null; price_from?: number | null };
+type ServiceOption = {
+  id: string;
+  name: string;
+  slug?: string | null;
+  icon?: string | null;
+  short_desc?: string | null;
+  duration_minutes?: number | null;
+  price_from?: number | null;
+};
+
+// Icon per service (services.icon); anything unknown falls back to the stethoscope.
+const SERVICE_ICONS: Record<string, typeof Stethoscope> = {
+  stethoscope: Stethoscope,
+  syringe: Syringe,
+  pill: Pill,
+  scissors: Scissors,
+  ellipsis: CircleEllipsis,
+};
+
+/** "Others" needs the owner to say what the visit is for. */
+const isOtherService = (svc?: ServiceOption) => svc?.slug === "others";
 type SlotOption = {
   id: string;
   start: string;
@@ -461,6 +485,10 @@ export function AppointmentRequestForm() {
       setFormError(`This slot is fully booked (max ${selectedSlot.maxCapacity}).`);
       return;
     }
+    if (isOtherService(selectedService) && !formData.reason.trim()) {
+      setFormError("Please describe what your pet needs in Reason for visit.");
+      return;
+    }
     setIsPending(true);
     setFormError(null);
     try {
@@ -595,10 +623,14 @@ export function AppointmentRequestForm() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {services.map((svc) => (
+                  {services.map((svc) => {
+                    const ServiceIcon = SERVICE_ICONS[svc.icon ?? ""] ?? Stethoscope;
+                    return (
                     <button
                       key={svc.id}
                       type="button"
+                      data-testid={`service-${svc.slug ?? svc.id}`}
+                      aria-pressed={formData.serviceId === svc.id}
                       onClick={() => set("serviceId", svc.id)}
                       className={`flex items-start gap-3 p-3.5 rounded-xl border-2 text-left transition-all ${
                         formData.serviceId === svc.id
@@ -609,7 +641,7 @@ export function AppointmentRequestForm() {
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
                         formData.serviceId === svc.id ? "bg-primary/20" : "bg-muted"
                       }`}>
-                        <Stethoscope className="w-4 h-4 text-primary" />
+                        <ServiceIcon className="w-4 h-4 text-primary" />
                       </div>
                       <div className="min-w-0">
                         <p className={`text-sm font-semibold truncate ${
@@ -617,6 +649,9 @@ export function AppointmentRequestForm() {
                         }`}>
                           {svc.name}
                         </p>
+                        {svc.short_desc && (
+                          <p className="text-xs text-muted-foreground mt-0.5 truncate">{svc.short_desc}</p>
+                        )}
                         {svc.duration_minutes && (
                           <p className="text-[10px] text-muted-foreground mt-0.5">
                             ~{svc.duration_minutes} min
@@ -628,7 +663,9 @@ export function AppointmentRequestForm() {
                         <CheckCircle2 className="w-4 h-4 text-primary shrink-0 ml-auto mt-0.5" />
                       )}
                     </button>
-                  ))}
+                    );
+                  }
+                  )}
                 </div>
               )}
             </div>
@@ -827,13 +864,18 @@ export function AppointmentRequestForm() {
             <div>
               <label className="block text-sm font-medium text-foreground mb-2" htmlFor="appt-reason">
                 Reason for visit
+                {isOtherService(selectedService) && <span className="text-destructive"> *</span>}
               </label>
               <textarea
                 id="appt-reason"
                 value={formData.reason}
                 onChange={(e) => set("reason", e.target.value)}
                 rows={3}
-                placeholder="e.g. Annual check-up, limping on left paw, routine vaccines…"
+                placeholder={
+                  isOtherService(selectedService)
+                    ? "Tell the clinic what your pet needs (required for Others)"
+                    : "e.g. Annual check-up, limping on left paw, routine vaccines…"
+                }
                 disabled={isPending}
                 className="block w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
               />

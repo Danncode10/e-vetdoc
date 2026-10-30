@@ -299,9 +299,16 @@ async function requestAppointmentOrThrow(input: Omit<AppointmentInsert, 'owner_i
     throw new Error("Please choose a date and time slot.");
   }
 
+  const supabase = await createClient();
+  if (input.service_id) {
+    const { data: service } = await supabase.from("services").select("slug").eq("id", input.service_id).maybeSingle();
+    if (service?.slug === "others" && !input.reason?.trim()) {
+      throw new Error("Please describe what your pet needs in Reason for visit.");
+    }
+  }
+
   // Booking is approved automatically when the slot has room. The capacity check and
   // insert happen atomically in the database, so the last spot cannot be double-booked.
-  const supabase = await createClient();
   const { data, error } = await supabase.rpc("book_appointment", {
     p_pet_id: input.pet_id,
     p_service_id: input.service_id ?? undefined,

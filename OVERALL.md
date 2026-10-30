@@ -156,6 +156,8 @@ top bar on phones).
 
 ### 4.5 Appointments and online booking
 - 4-step booking: **Pet & Service → Pick a Date → Choose Time → Details** (reason, notes).
+- Services: **General Consultation, Vaccination, Deworming, Grooming, Others** (each with its own
+  icon). Choosing **Others** requires a reason for the visit.
 - Calendar shows **open** days (green), **full** days (red, "FULL", cannot be clicked),
   closed days, and past days (disabled).
 - Time slots show **"x/y booked · n left"**; full slots are disabled.
@@ -222,6 +224,11 @@ One feed of everything important, newest first, with category filters, search, a
 ### 4.11 Public website
 - Landing page explaining the service (hero, how it works: *Book a visit → Document care clearly →
   Keep billing connected*), call to action to sign in or register.
+- **About us** (`/#about`): the clinic, **Bangan Hill Veterinary Clinic**, and the developers —
+  Chino Camilo T. Guiyab (BSIT), Vinz Auscar Baliton (BSIT), Romulo M. Umali (NDM),
+  Vinverth Vince Rashid M. Ramos (NDM), Giezel Ann S. Sagadra (IS).
+- **Contact us** (`/#contact`): Cornwall Building, Stall 7 and 8, Purok 3, Vista Alegre, Bayombong,
+  Nueva Vizcaya, with a map, Get directions (Google Maps) and Book an appointment.
 
 ## 5. Main workflows (step by step)
 
@@ -509,6 +516,7 @@ see `docs/revisions/audit-report-oct-30.md`.
 | Oct 30, 2026 — PR #9 | Owners directory lists all owners with Online/Offline filter; account change logs; full days blocked on calendar; login redirect fix |
 | Oct 30, 2026 — audit | Security/consistency audit (21 items) fixed: booking bypass, forged history, vet schedule/billing access, staff privacy, encounter rules, safe one-step billing, schedule validation, counts, cleanup |
 | Oct 30, 2026 — captcha | Spam check always on in production: built-in math captcha + honeypot on sign-up and forgot password (Turnstile optional); login page fits phones |
+| Oct 30, 2026 — services | Deworming, Grooming and Others added to booking (Others needs a reason); landing page About us and Contact us |
 | Oct 30, 2026 — schedules | Clear error messages on the live site; Add Schedule for multiple dates or a date range |
 | Oct 30, 2026 — approval | Same-day booking, each pet once per day, Admin can delete an owner and all data from the Owners tab, Admin/Staff approval with capacity limit, encounters locked until approved, email templates bundled for Vercel |
 | Oct 30, 2026 — fixes | "Authorized Owners" renamed "Pet Owners"; overdue bookings auto-cancel with an Auto-cancelled indicator; Team tab Online/Offline badges + filter; Owners tab shows "Offline" instead of "Never signed in"; copy-paste SQL to delete an account (`docs/supabase/delete-account-by-email.sql`) |
