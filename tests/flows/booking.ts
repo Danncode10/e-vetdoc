@@ -2,8 +2,9 @@ import { expect, Page } from '@playwright/test';
 
 export async function runAdminScheduleFlow(page: Page) {
   await page.goto('/login');
+  await page.waitForLoadState('networkidle');
   const adminEmail = process.env.TEST_ADMIN_EMAIL || 'adminTest@gmail.com';
-  const adminPassword = process.env.TEST_ADMIN_PASSWORD || 'jytmos-serQo0-sawfyv';
+  const adminPassword = process.env.TEST_ADMIN_PASSWORD!;
   
   await page.locator('#email').fill(adminEmail);
   await page.locator('#password').fill(adminPassword);
@@ -36,9 +37,10 @@ export async function runAdminScheduleFlow(page: Page) {
 
 export async function runOwnerBookingFlow(page: Page) {
   const ownerEmail = process.env.TEST_OWNER_EMAIL || 'ownerTest@gmail.com';
-  const ownerPassword = process.env.TEST_OWNER_PASSWORD || 'jytmos-serQo0-sawfyv';
+  const ownerPassword = process.env.TEST_OWNER_PASSWORD!;
   
   await page.goto('/login');
+  await page.waitForLoadState('networkidle');
   await page.locator('#email').fill(ownerEmail);
   await page.locator('#password').fill(ownerPassword);
   await page.locator('button[type="submit"]').click();
