@@ -128,6 +128,9 @@ top bar on phones).
 - Each member shows **Online** or **Offline** (with **Last seen …** when known), or
   **Deactivated**; an **All / Online / Offline** filter with counts lists who is on right now.
   Deactivated members always count as offline. The page refreshes every minute.
+- **Team Trash (Admin only):** **Trash** on a member signs them out and removes them from the roster;
+  the Trash section has **Restore** and **Delete permanently**. Members who wrote medical or billing
+  records can't be deleted permanently (patient history), only kept in Trash. You can't trash yourself.
 - The system never allows removing the **last active Admin**.
 
 ### 4.3 Pets and owners
@@ -142,6 +145,12 @@ top bar on phones).
   can't sign in and is hidden from the directory, but nothing is deleted; the **Trash** view lists
   them with **Restore**. Only an **Admin** can **Delete permanently**, and only from Trash (login,
   profile, pets they alone own, appointments, medical records, invoices and payments).
+- **Pet Trash (Admin and Staff):** each pet card in the clinic Pet Registry has **Move to Trash**;
+  a trashed pet is hidden everywhere and can't be booked. The **Trash** view has **Restore**; only an
+  **Admin** can **Delete permanently** (the pet, its appointments, medical records and their invoices).
+- **Every permanent delete** (owner, pet, team member, multiple schedules) asks *"Are you sure you
+  want to permanently delete …?"*, warns that it cannot be undone, and stays disabled until you type
+  **DELETE**.
 - Owner profile page and per-pet record page for the clinic. A pet's linked accounts are listed
   under **Pet Owners**.
 
@@ -405,6 +414,8 @@ erDiagram
 | `mark_appointment_paid` | trigger | A paid invoice linked to a visit marks the appointment Paid |
 | `generate_invoice_number`, `generate_receipt_number` | triggers | `INV-YYYY-######`, `RCPT-YYYY-######` |
 | `book_appointment()` | function (RPC) | Owner request (`requested`): same-day until slot end, each pet once per day, refused when approved places are full |
+| `trash_pet()`, `restore_pet()`, `purge_pet()` | functions (RPC) | Pet Trash (Admin/Staff); permanent delete Admin only, from Trash |
+| `trash_team_member()`, `restore_team_member()`, `purge_team_member()` | functions (RPC) | Team Trash (Admin); purge refused for members with patient records |
 | `trash_owner()`, `restore_owner()` | functions (RPC) | Admin/Staff move an owner to Trash (signed out, hidden) and back |
 | `admin_delete_owner()` | function (RPC) | Admin only: permanently deletes an owner **in Trash** and all of its data in one transaction |
 | `approve_appointment()` | function (RPC) | Admin/Staff approve a request (→ `booked`) within the slot capacity |
@@ -522,6 +533,7 @@ see `docs/revisions/audit-report-oct-30.md`.
 | Oct 30, 2026 — PR #9 | Owners directory lists all owners with Online/Offline filter; account change logs; full days blocked on calendar; login redirect fix |
 | Oct 30, 2026 — audit | Security/consistency audit (21 items) fixed: booking bypass, forged history, vet schedule/billing access, staff privacy, encounter rules, safe one-step billing, schedule validation, counts, cleanup |
 | Oct 30, 2026 — captcha | Spam check always on in production: built-in math captcha + honeypot on sign-up and forgot password (Turnstile optional); login page fits phones |
+| Oct 30, 2026 — trash 2 | Trash/Restore for pets and team members; typed "DELETE" confirmation on every permanent delete |
 | Oct 30, 2026 — trash | Owners Trash/Restore (Admin+Staff), permanent delete from Trash (Admin), delete multiple schedules, Team "Staff" label, exact clinic map pin |
 | Oct 30, 2026 — services | Deworming, Grooming and Others added to booking (Others needs a reason); landing page About us and Contact us |
 | Oct 30, 2026 — schedules | Clear error messages on the live site; Add Schedule for multiple dates or a date range |

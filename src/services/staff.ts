@@ -123,6 +123,7 @@ export async function listStaff(): Promise<StaffMember[]> {
     .from("profiles")
     .select("id, email, full_name, role, is_active, created_at, last_seen_at")
     .in("role", [...STAFF_ROLES])
+    .is("deleted_at", null)
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -282,4 +283,46 @@ export async function setStaffActive(input: { id: string; isActive: boolean }): 
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Could not update the staff account status." };
   }
+}
+
+// ── Team Trash (Admin only) ──
+
+export type TrashedStaffMember = StaffMember & { deleted_at: string | null };
+
+export async function listTrashedStaff(): Promise<TrashedStaffMember[]> {
+  await getAdminActor();
+  const adminClient = createAdminClient();
+  const { data, error } = await adminClient
+    .from("profiles")
+    .select("id, email, full_name, role, is_active, created_at, last_seen_at, deleted_at")
+    .in("role", [...STAFF_ROLES])
+    .not("deleted_at", "is", null)
+    .order("deleted_at", { ascending: false });
+  if (error) throw new Error("Could not load the team Trash.");
+  return data;
+}
+
+async function callTeamRpc(fn: "trash_team_member" | "restore_team_member" | "purge_team_member", id: string, success: string): Promise<StaffActionResult> {
+  try {
+    await getAdminActor();
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Only an Administrator can manage the team." };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.rpc(fn, { p_profile_id: id });
+  if (error) return { error: error.message };
+  revalidatePath("/dashboard/team");
+  return { success };
+}
+
+export async function trashStaffMember(id: string) {
+  return callTeamRpc("trash_team_member", id, "Moved to Trash. You can restore them any time.");
+}
+
+export async function restoreStaffMember(id: string) {
+  return callTeamRpc("restore_team_member", id, "Team member restored.");
+}
+
+export async function purgeStaffMember(id: string) {
+  return callTeamRpc("purge_team_member", id, "Team member deleted permanently.");
 }

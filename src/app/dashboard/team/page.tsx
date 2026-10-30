@@ -1,11 +1,11 @@
 import { requireRole } from "@/services/authorization";
-import { listStaff } from "@/services/staff";
+import { listStaff, listTrashedStaff } from "@/services/staff";
 import { StaffManagement } from "@/components/staff-management";
 import { ShieldCheck } from "lucide-react";
 
 export default async function TeamPage() {
   await requireRole(["admin"]);
-  const staff = await listStaff();
+  const [staff, trashed] = await Promise.all([listStaff(), listTrashedStaff()]);
 
   return (
     <div className="space-y-6">
@@ -20,7 +20,7 @@ export default async function TeamPage() {
         </div>
       </div>
 
-      <StaffManagement staff={staff} />
+      <StaffManagement staff={staff} trashed={trashed} />
     </div>
   );
 }

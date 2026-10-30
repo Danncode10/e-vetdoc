@@ -55,6 +55,10 @@ function describeStaffLog(action: string, actorName: string, targetName: string,
     }
     case "owner_trashed":
       return `${actorName} moved owner ${targetName} to Trash.`;
+    case "staff_trashed":
+      return `${actorName} moved team member ${targetName} to Trash.`;
+    case "staff_restored":
+      return `${actorName} restored team member ${targetName} from Trash.`;
     case "owner_restored":
       return `${actorName} restored owner ${targetName} from Trash.`;
     case "password_changed":

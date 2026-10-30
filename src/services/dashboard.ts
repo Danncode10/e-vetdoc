@@ -67,6 +67,8 @@ export async function getOwnerDashboardSummary(): Promise<OwnerDashboardSummary>
     .eq('owner_profile_id', profile.id);
 
   const pets: OwnerPetSummary[] = (petLinks || [])
+    // Pets in Trash are hidden from their owner.
+    .filter((link: any) => !link.pet?.deleted_at)
     .filter((link) => link.pet && (link.pet as any).is_active !== false)
     .map((link) => {
       const p = link.pet as any;
@@ -170,7 +172,7 @@ export async function getAdminDashboardSummary(): Promise<AdminDashboardSummary>
   const supabase = await createClient();
 
   const [petsRes, ownersRes, apptsRes, unpaidRes, recentApptsRes] = await Promise.all([
-    supabase.from("pets").select("id", { count: "exact", head: true }),
+    supabase.from("pets").select("id", { count: "exact", head: true }).is("deleted_at", null),
     // Same rule as the Owners tab: every owner account except disapproved sign-ups.
     supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "owner").neq("approval_status", "rejected").is("deleted_at", null),
     // Active = pending approval, approved and still to be seen, or seen but not yet paid.

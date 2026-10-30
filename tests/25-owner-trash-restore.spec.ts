@@ -81,6 +81,9 @@ test('admin deletes an owner permanently from Trash; everything is gone', async 
   await page.getByTestId('view-trash').click();
   const trashCard = page.getByTestId(`trashed-owner-${owner.email}`);
   await trashCard.getByTestId('purge-owner').click();
+  await expect(page.getByText(/Are you sure you want to permanently delete/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Delete owner permanently' })).toBeDisabled();
+  await page.getByTestId('confirm-typed-input').fill('DELETE');
   await page.getByRole('button', { name: 'Delete owner permanently' }).click();
   await expect(page.getByText('Owner deleted permanently')).toBeVisible({ timeout: 30000 });
   await expect(trashCard).toHaveCount(0);

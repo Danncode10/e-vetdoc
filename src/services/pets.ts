@@ -99,6 +99,7 @@ export async function listPetsForCurrentUser() {
   let query = supabase
     .from("pets")
     .select("*, pet_owners(id, relationship, is_primary_contact, can_view_medical_records, can_receive_notifications, owner_profile_id, profiles!pet_owners_owner_profile_id_fkey(full_name, email, phone))")
+    .is("deleted_at", null)
     .order("name");
   // Owners: only their own pets (RLS enforces this too). Clinic: every pet, no cap.
   if (profile.role === "owner") {
@@ -120,14 +121,18 @@ export async function listOwnerRegistry() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, full_name, email, phone, last_seen_at, approval_status, pet_owners(pet_id, relationship, is_primary_contact, can_view_medical_records, pets(id, name, species, breed)), appointments!appointments_owner_id_fkey(id, status, scheduled_start, preferred_date, preferred_time, reason, services(id, name), pets(id, name))")
+    .select("id, full_name, email, phone, last_seen_at, approval_status, pet_owners(pet_id, relationship, is_primary_contact, can_view_medical_records, pets(id, name, species, breed, deleted_at)), appointments!appointments_owner_id_fkey(id, status, scheduled_start, preferred_date, preferred_time, reason, services(id, name), pets(id, name))")
     .eq("role", "owner")
     // Every owner account, online or not; disapproved sign-ups are not clients; Trash is separate.
     .neq("approval_status", "rejected")
     .is("deleted_at", null)
     .order("full_name");
   if (error) throw error;
-  return data;
+  // Pets in Trash are hidden.
+  return data.map((owner) => ({
+    ...owner,
+    pet_owners: (owner.pet_owners ?? []).filter((link) => !(link.pets as { deleted_at?: string | null } | null)?.deleted_at),
+  }));
 }
 
 export async function getOwnerRegistryDetail(ownerProfileId: string): Promise<OwnerRegistryDetail | null> {
@@ -145,7 +150,7 @@ export async function getOwnerRegistryDetail(ownerProfileId: string): Promise<Ow
 
   const { data: links, error: linksError } = await supabase
     .from("pet_owners")
-    .select("relationship, is_primary_contact, pets!pet_owners_pet_id_fkey(id, name, species, breed)")
+    .select("relationship, is_primary_contact, pets!pet_owners_pet_id_fkey(id, name, species, breed, deleted_at)")
     .eq("owner_profile_id", ownerProfileId)
     .order("created_at");
   if (linksError) throw linksError;
@@ -159,6 +164,7 @@ export async function getOwnerRegistryDetail(ownerProfileId: string): Promise<Ow
       const petRelation = link.pets as unknown;
       const pet = Array.isArray(petRelation) ? petRelation[0] : petRelation;
       if (!pet || typeof pet !== "object" || !("id" in pet) || !("name" in pet) || !("species" in pet)) return [];
+      if ((pet as { deleted_at?: string | null }).deleted_at) return [];
       const summary = pet as { id: string; name: string; species: Pet["species"]; breed: string | null };
       return [{
         id: summary.id,
@@ -191,7 +197,7 @@ export async function getStaffPetRecord(ownerProfileId: string, petId: string): 
     .eq("id", petId)
     .maybeSingle();
   if (petError) throw petError;
-  if (!pet) return null;
+  if (!pet || pet.deleted_at) return null;
 
   return {
     ...pet,
@@ -275,11 +281,6 @@ export async function updatePet(id: string, updates: PetUpdate) {
   return data;
 }
 
-export async function deletePet(id: string) {
-  const supabase = await createClient();
-  const { error } = await supabase.from("pets").delete().eq("id", id);
-  if (error) throw error;
-}
 
 export async function createPetOwner(input: PetOwnerInsert) {
   const supabase = await createClient();
@@ -402,4 +403,42 @@ export async function trashOwner(ownerId: string) {
 /** Admin / Staff: bring an owner back from Trash. */
 export async function restoreOwner(ownerId: string) {
   return asActionResult(() => callOwnerRpc("restore_owner", ownerId));
+}
+
+// ── Pet Trash (Admin / Staff); permanent delete is Admin only, from Trash ──
+
+/** Pets in Trash, most recently trashed first, with their owners' names. */
+export async function listTrashedPets() {
+  const { profile } = await requireAuth();
+  if (!isAdminOrStaff(profile)) throw new Error("Only Admin or Staff can view Trash.");
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("pets")
+    .select("id, name, species, breed, deleted_at, pet_owners(profiles!pet_owners_owner_profile_id_fkey(full_name, email))")
+    .not("deleted_at", "is", null)
+    .order("deleted_at", { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+async function callPetRpc(fn: "trash_pet" | "restore_pet" | "purge_pet", petId: string) {
+  await requireAuth();
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc(fn, { p_pet_id: petId });
+  if (error) throw new Error(error.message);
+  revalidatePath("/dashboard");
+  return { name: data };
+}
+
+export async function trashPet(petId: string) {
+  return asActionResult(() => callPetRpc("trash_pet", petId));
+}
+
+export async function restorePet(petId: string) {
+  return asActionResult(() => callPetRpc("restore_pet", petId));
+}
+
+/** Admin only, pets already in Trash: deletes the pet with its visits and medical records. */
+export async function purgePet(petId: string) {
+  return asActionResult(() => callPetRpc("purge_pet", petId));
 }

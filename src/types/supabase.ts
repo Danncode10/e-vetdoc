@@ -628,6 +628,8 @@ export type Database = {
           color: string | null
           created_at: string
           date_of_birth: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           id: string
           name: string
           notes: string | null
@@ -642,6 +644,8 @@ export type Database = {
           color?: string | null
           created_at?: string
           date_of_birth?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           name: string
           notes?: string | null
@@ -656,6 +660,8 @@ export type Database = {
           color?: string | null
           created_at?: string
           date_of_birth?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           name?: string
           notes?: string | null
@@ -664,7 +670,15 @@ export type Database = {
           species_detail?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "pets_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       prescriptions: {
         Row: {
@@ -1108,6 +1122,8 @@ export type Database = {
           color: string | null
           created_at: string
           date_of_birth: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           id: string
           name: string
           notes: string | null
@@ -1123,6 +1139,8 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      purge_pet: { Args: { p_pet_id: string }; Returns: string }
+      purge_team_member: { Args: { p_profile_id: string }; Returns: string }
       quick_bill_appointment: {
         Args: {
           p_amount: number
@@ -1138,8 +1156,12 @@ export type Database = {
         }[]
       }
       restore_owner: { Args: { p_owner_id: string }; Returns: string }
+      restore_pet: { Args: { p_pet_id: string }; Returns: string }
+      restore_team_member: { Args: { p_profile_id: string }; Returns: string }
       touch_last_seen: { Args: never; Returns: undefined }
       trash_owner: { Args: { p_owner_id: string }; Returns: string }
+      trash_pet: { Args: { p_pet_id: string }; Returns: string }
+      trash_team_member: { Args: { p_profile_id: string }; Returns: string }
     }
     Enums: {
       appointment_mode: "in_person" | "virtual"

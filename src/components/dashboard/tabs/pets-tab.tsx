@@ -1,12 +1,15 @@
 "use client";
 
 import * as React from "react";
-import { PawPrint, Pencil, Plus, Search, Calendar, User, Dog, Cat, Sparkles, X, ExternalLink, Stethoscope } from "lucide-react";
+import { PawPrint, Pencil, Plus, Search, Calendar, User, Dog, Cat, Sparkles, X, ExternalLink, Stethoscope, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
+import { PetTrash } from "@/components/dashboard/pets/pet-trash";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { PetForm } from "@/components/dashboard/pets/pet-form";
 import { OwnerPetMedicalDialog } from "@/components/dashboard/pets/owner-pet-medical-dialog";
-import { listPetsForCurrentUser, updateOwnedPet, type PetFormInput } from "@/services/pets";
+import { listPetsForCurrentUser, trashPet, updateOwnedPet, type PetFormInput } from "@/services/pets";
 import type { UserRole } from "@/lib/dashboard-features";
 
 type PetRecord = Awaited<ReturnType<typeof listPetsForCurrentUser>>[number];
@@ -70,6 +73,10 @@ export function PetsTab({ role }: { role: UserRole }) {
   const [error, setError] = React.useState<string | null>(null);
   const [editingPet, setEditingPet] = React.useState<PetRecord | null>(null);
   const [selectedMedicalPet, setSelectedMedicalPet] = React.useState<PetRecord | null>(null);
+  const [view, setView] = React.useState<"registry" | "trash">("registry");
+  const [trashTarget, setTrashTarget] = React.useState<PetRecord | null>(null);
+  const [isTrashing, setIsTrashing] = React.useState(false);
+  const canTrash = role === "admin" || role === "staff";
 
   const loadPets = React.useCallback(async () => {
     try {
@@ -119,6 +126,30 @@ export function PetsTab({ role }: { role: UserRole }) {
               : "Search patient profiles and inspect clinical records."}
           </p>
         </div>
+        {canTrash && (
+          <div className="flex gap-2" role="group" aria-label="Pet Registry or Trash">
+            <Button
+              type="button"
+              data-testid="view-pets"
+              variant={view === "registry" ? "default" : "outline"}
+              aria-pressed={view === "registry"}
+              className="min-h-12 gap-2"
+              onClick={() => setView("registry")}
+            >
+              <PawPrint className="h-4 w-4" /> Pets
+            </Button>
+            <Button
+              type="button"
+              data-testid="view-pet-trash"
+              variant={view === "trash" ? "default" : "outline"}
+              aria-pressed={view === "trash"}
+              className="min-h-12 gap-2"
+              onClick={() => setView("trash")}
+            >
+              <Trash2 className="h-4 w-4" /> Trash
+            </Button>
+          </div>
+        )}
         {role === "owner" && (
           <Button
             onClick={() => router.push("/dashboard/pets/new")}
@@ -130,6 +161,10 @@ export function PetsTab({ role }: { role: UserRole }) {
         )}
       </div>
 
+      {view === "trash" ? (
+        <PetTrash role={role ?? ""} onChanged={() => void loadPets()} />
+      ) : (
+      <>
       {/* Controls: Search + Filter Pills */}
       <div className="space-y-3">
         <div className="relative">
@@ -306,7 +341,7 @@ export function PetsTab({ role }: { role: UserRole }) {
 
                 {/* Footer Action */}
                 {canOpenRecord ? (
-                  <div className="border-t border-border px-5 py-3 bg-muted/20">
+                  <div className="border-t border-border px-5 py-3 bg-muted/20 flex flex-col gap-2">
                     <Button
                       type="button"
                       variant="outline"
@@ -317,6 +352,18 @@ export function PetsTab({ role }: { role: UserRole }) {
                       <ExternalLink className="w-3.5 h-3.5" />
                       Open Clinical Pet Record
                     </Button>
+                    {canTrash && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        data-testid={`trash-pet-${pet.name}`}
+                        className="w-full gap-2 text-xs min-h-12 sm:min-h-9 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => setTrashTarget(pet)}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Move to Trash
+                      </Button>
+                    )}
                   </div>
                 ) : role === "owner" ? (
                   <div className="border-t border-border px-5 py-3 bg-muted/20 flex gap-2">
@@ -336,6 +383,31 @@ export function PetsTab({ role }: { role: UserRole }) {
           })}
         </div>
       )}
+
+      </>
+      )}
+
+      <ConfirmationDialog
+        open={Boolean(trashTarget)}
+        title={`Move ${trashTarget?.name ?? "this pet"} to Trash?`}
+        description="The pet is hidden and can't be booked. Nothing is deleted: you can restore it from Trash at any time."
+        confirmLabel="Move to Trash"
+        isPending={isTrashing}
+        onOpenChange={(open) => { if (!open && !isTrashing) setTrashTarget(null); }}
+        onConfirm={async () => {
+          if (!trashTarget) return;
+          setIsTrashing(true);
+          const result = await trashPet(trashTarget.id);
+          setIsTrashing(false);
+          if (result.error !== undefined) {
+            toast.error(result.error);
+            return;
+          }
+          toast.success("Moved to Trash", { description: `${trashTarget.name} can be restored from Trash.` });
+          setPets((cur) => cur.filter((p) => p.id !== trashTarget.id));
+          setTrashTarget(null);
+        }}
+      />
 
       {/* Owner Medical Record Dialog */}
       {selectedMedicalPet && (

@@ -161,13 +161,14 @@ function BulkDeleteModal({
 
       <ConfirmationDialog
         open={confirming}
-        title={`Delete ${selected.size} schedule${selected.size === 1 ? "" : "s"}?`}
+        title={`Are you sure you want to delete ${selected.size} schedule${selected.size === 1 ? "" : "s"}?`}
         description={
           bookingsAffected > 0
-            ? `${bookingsAffected} approved booking${bookingsAffected === 1 ? "" : "s"} on these dates will be cancelled. This cannot be undone.`
-            : "Bookings on these dates will be cancelled. This cannot be undone."
+            ? `${bookingsAffected} approved booking${bookingsAffected === 1 ? "" : "s"} on these dates will be cancelled.`
+            : "Any bookings on these dates will be cancelled."
         }
         confirmLabel="Delete schedules"
+        requireTypedConfirmation="DELETE"
         isPending={isDeleting}
         onOpenChange={(open) => { if (!open && !isDeleting) setConfirming(false); }}
         onConfirm={async () => {

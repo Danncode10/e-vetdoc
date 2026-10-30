@@ -126,9 +126,10 @@ export function OwnerTrash({ role, onChanged }: { role: string; onChanged: () =>
 
       <ConfirmationDialog
         open={Boolean(purgeTarget)}
-        title={`Permanently delete ${purgeTarget?.full_name || purgeTarget?.email || "this owner"}?`}
-        description="This deletes the owner's login, profile, pets they alone own, appointments, medical records, invoices and payments. Pets shared with another owner are kept. This cannot be undone."
+        title={`Are you sure you want to permanently delete ${purgeTarget?.full_name || purgeTarget?.email || "this owner"}?`}
+        description="This deletes the owner's login, profile, pets they alone own, appointments, medical records, invoices and payments. Pets shared with another owner are kept."
         confirmLabel="Delete owner permanently"
+        requireTypedConfirmation="DELETE"
         isPending={busyId === purgeTarget?.id}
         onOpenChange={(open) => {
           if (!open && !busyId) setPurgeTarget(null);

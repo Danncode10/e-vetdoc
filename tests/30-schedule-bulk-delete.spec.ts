@@ -49,6 +49,8 @@ test('staff deletes two of three schedules in one go', async ({ page }) => {
   await page.getByTestId(`bulk-select-${dates[2]}`).check();
   await expect(page.getByTestId('bulk-delete-confirm')).toHaveText(/Delete 2 schedules/);
   await page.getByTestId('bulk-delete-confirm').click();
+  await expect(page.getByRole('button', { name: 'Delete schedules' })).toBeDisabled();
+  await page.getByTestId('confirm-typed-input').fill('DELETE');
   await page.getByRole('button', { name: 'Delete schedules' }).click();
   await expect(page.getByText('Deleted 2 schedules')).toBeVisible({ timeout: 30000 });
 

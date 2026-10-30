@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { AlertTriangle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type ConfirmationDialogProps = {
@@ -12,6 +12,11 @@ type ConfirmationDialogProps = {
   isPending?: boolean;
   onConfirm: () => void;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Permanent, irreversible actions: show a red warning and keep the confirm button disabled
+   * until the user types this word (e.g. "DELETE").
+   */
+  requireTypedConfirmation?: string;
 };
 
 export function ConfirmationDialog({
@@ -22,14 +27,19 @@ export function ConfirmationDialog({
   isPending = false,
   onConfirm,
   onOpenChange,
+  requireTypedConfirmation,
 }: ConfirmationDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const [typed, setTyped] = useState("");
+  const isDanger = Boolean(requireTypedConfirmation);
+  const typedOk = !requireTypedConfirmation || typed.trim() === requireTypedConfirmation;
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
 
     if (open && !dialog.open) {
+      setTyped("");
       dialog.showModal();
       return;
     }
@@ -55,19 +65,50 @@ export function ConfirmationDialog({
     >
       <div className="space-y-6 p-6">
         <div className="space-y-2">
+          {isDanger && (
+            <div className="flex size-11 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+              <AlertTriangle className="size-5" />
+            </div>
+          )}
           <h2 id="confirmation-dialog-title" className="text-lg font-semibold text-foreground">
             {title}
           </h2>
           <p id="confirmation-dialog-description" className="text-sm leading-6 text-muted-foreground">
             {description}
           </p>
+          {isDanger && (
+            <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm font-medium text-destructive">
+              This is permanent and cannot be undone.
+            </p>
+          )}
         </div>
+        {requireTypedConfirmation && (
+          <div className="space-y-2">
+            <label htmlFor="confirmation-dialog-typed" className="block text-sm font-medium text-foreground">
+              Type <span className="font-mono font-bold">{requireTypedConfirmation}</span> to confirm
+            </label>
+            <input
+              id="confirmation-dialog-typed"
+              data-testid="confirm-typed-input"
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              autoComplete="off"
+              disabled={isPending}
+              className="min-h-12 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+          </div>
+        )}
         <div className="grid gap-2 sm:grid-cols-2 sm:justify-end">
           <Button type="button" variant="outline" disabled={isPending} onClick={() => onOpenChange(false)}>
             <X className="size-4" />
             Cancel
           </Button>
-          <Button type="button" disabled={isPending} onClick={onConfirm}>
+          <Button
+            type="button"
+            variant={isDanger ? "destructive" : "default"}
+            disabled={isPending || !typedOk}
+            onClick={onConfirm}
+          >
             {isPending ? "Saving..." : confirmLabel}
           </Button>
         </div>

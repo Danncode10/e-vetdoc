@@ -2,11 +2,20 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Loader2, ShieldCheck, Stethoscope, UserCog, UserPlus, UserRoundCheck, UserRoundX, X, Users } from "lucide-react";
+import { AlertTriangle, Loader2, RotateCcw, ShieldCheck, Stethoscope, Trash2, UserCog, UserPlus, UserRoundCheck, UserRoundX, X, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
-import { addExistingStaff, setStaffActive, updateStaffRole, type StaffMember } from "@/services/staff";
+import {
+  addExistingStaff,
+  purgeStaffMember,
+  restoreStaffMember,
+  setStaffActive,
+  trashStaffMember,
+  updateStaffRole,
+  type StaffMember,
+  type TrashedStaffMember,
+} from "@/services/staff";
 import { isOnline, lastSeenLabel, PRESENCE_HEARTBEAT_MS } from "@/lib/presence";
 
 type StaffRole = "admin" | "staff" | "veterinarian";
@@ -93,10 +102,12 @@ function PresenceBadge({ member, now }: { member: StaffMember; now: number }) {
   );
 }
 
-export function StaffManagement({ staff }: { staff: StaffMember[] }) {
+export function StaffManagement({ staff, trashed = [] }: { staff: StaffMember[]; trashed?: TrashedStaffMember[] }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [presence, setPresence] = useState<PresenceFilter>("all");
+  const [trashTarget, setTrashTarget] = useState<StaffMember | null>(null);
+  const [purgeTarget, setPurgeTarget] = useState<TrashedStaffMember | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [newStaff, setNewStaff] = useState({ email: "", role: "veterinarian" as StaffRole });
   const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
@@ -140,6 +151,8 @@ export function StaffManagement({ staff }: { staff: StaffMember[] }) {
       if (result.success) toast.success(result.success);
       setConfirmation(null);
       setEditingRoleId(null);
+      setTrashTarget(null);
+      setPurgeTarget(null);
     });
   }
 
@@ -339,6 +352,18 @@ export function StaffManagement({ staff }: { staff: StaffMember[] }) {
                         {member.is_active ? <UserRoundX className="w-3.5 h-3.5" /> : <UserRoundCheck className="w-3.5 h-3.5" />}
                         {member.is_active ? "Deactivate" : "Reactivate"}
                       </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        data-testid="trash-staff"
+                        className="flex-1 sm:flex-initial gap-1.5 text-xs h-9 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        disabled={isPending}
+                        onClick={() => setTrashTarget(member)}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Trash
+                      </Button>
                     </div>
                   </div>
 
@@ -442,6 +467,86 @@ export function StaffManagement({ staff }: { staff: StaffMember[] }) {
           </div>
         )}
       </section>
+
+      {/* Team Trash */}
+      <section data-testid="team-trash" className="rounded-2xl border border-dashed border-border bg-card overflow-hidden">
+        <div className="p-5 sm:p-6 border-b border-border space-y-1">
+          <h3 className="flex items-center gap-2 text-lg font-bold text-foreground">
+            <Trash2 className="h-5 w-5 text-muted-foreground" /> Trash
+          </h3>
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            Team members in Trash can&apos;t sign in. Nothing is deleted until you choose Delete permanently.
+          </p>
+        </div>
+        {trashed.length === 0 ? (
+          <div className="flex min-h-32 flex-col items-center justify-center gap-2 p-6 text-center">
+            <Trash2 className="h-8 w-8 text-muted-foreground" strokeWidth={1.5} />
+            <p className="text-sm font-medium text-foreground">Trash is empty.</p>
+          </div>
+        ) : (
+          <ul className="divide-y divide-border/60">
+            {trashed.map((member) => (
+              <li
+                key={member.id}
+                data-testid={`trashed-staff-${member.email}`}
+                className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6"
+              >
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="truncate text-base font-bold text-foreground">{staffName(member)}</p>
+                    <RoleBadge role={member.role as StaffRole} />
+                  </div>
+                  <p className="truncate text-xs sm:text-sm text-muted-foreground">{member.email ?? "No email recorded"}</p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    data-testid="restore-staff"
+                    className="flex-1 sm:flex-initial gap-1.5 min-h-12 sm:min-h-9"
+                    disabled={isPending}
+                    onClick={() => run(() => restoreStaffMember(member.id))}
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" /> Restore
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    data-testid="purge-staff"
+                    className="flex-1 sm:flex-initial gap-1.5 min-h-12 sm:min-h-9 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    disabled={isPending}
+                    onClick={() => setPurgeTarget(member)}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Delete permanently
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <ConfirmationDialog
+        open={Boolean(trashTarget)}
+        title={`Move ${trashTarget ? staffName(trashTarget) : "this team member"} to Trash?`}
+        description="They are signed out and removed from the roster. Nothing is deleted: you can restore them from Trash at any time."
+        confirmLabel="Move to Trash"
+        isPending={isPending}
+        onOpenChange={(open) => { if (!open) setTrashTarget(null); }}
+        onConfirm={() => { if (trashTarget) run(() => trashStaffMember(trashTarget.id)); }}
+      />
+
+      <ConfirmationDialog
+        open={Boolean(purgeTarget)}
+        title={`Are you sure you want to permanently delete ${purgeTarget ? staffName(purgeTarget) : "this team member"}?`}
+        description="This deletes their login and profile. Team members who wrote medical or billing records can't be deleted (those records belong to patients' history); keep them in Trash instead."
+        confirmLabel="Delete permanently"
+        requireTypedConfirmation="DELETE"
+        isPending={isPending}
+        onOpenChange={(open) => { if (!open) setPurgeTarget(null); }}
+        onConfirm={() => { if (purgeTarget) run(() => purgeStaffMember(purgeTarget.id)); }}
+      />
 
       <ConfirmationDialog
         open={Boolean(statusConfirmation && confirmedMember)}
