@@ -265,7 +265,7 @@ test.describe('screens', () => {
     appointments.push(future.appointmentId);
     await page.reload();
     // Wait for the card itself (the empty message is also absent while the page loads).
-    await expect(page.getByText('booked', { exact: true }).first()).toBeVisible({ timeout: 30000 });
+    await expect(page.getByText('Approved', { exact: true }).first()).toBeVisible({ timeout: 30000 });
     await expect(page.getByText('No upcoming visits scheduled')).toHaveCount(0);
   });
 });

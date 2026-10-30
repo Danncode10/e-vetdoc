@@ -22,10 +22,13 @@ import {
   ChevronRight,
   Sparkles,
   Receipt,
+  Hourglass,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { cancelAppointment } from "@/services/appointments";
+import { approveAppointment, cancelAppointment, type SlotUsage } from "@/services/appointments";
+import { AppointmentStatusBadge } from "@/components/dashboard/appointments/status-badge";
 import { CancelModal } from "@/components/dashboard/appointments/cancel-modal";
 import { cancelAudienceFor } from "@/lib/cancellation-reasons";
 import { AutoCancelledBadge, AutoCancelledNotice } from "@/components/dashboard/appointments/auto-cancelled";
@@ -57,48 +60,6 @@ function fmtDateTime(iso: string) {
   }).format(new Date(iso));
 }
 
-const STATUS_CONFIG: Record<string, { label: string; badge: string; dot: string }> = {
-  booked: {
-    label: "Booked",
-    badge: "bg-blue-100 text-blue-900 border-blue-300 dark:bg-blue-950/40 dark:text-blue-300",
-    dot: "bg-blue-500",
-  },
-  diagnosed: {
-    label: "Diagnosed",
-    badge: "bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300",
-    dot: "bg-amber-500",
-  },
-  paid: {
-    label: "Paid",
-    badge: "bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300",
-    dot: "bg-emerald-500",
-  },
-  completed: {
-    label: "Completed",
-    badge: "bg-green-100 text-green-900 border-green-300 dark:bg-green-950/40 dark:text-green-300",
-    dot: "bg-green-500",
-  },
-  cancelled: {
-    label: "Cancelled",
-    badge: "bg-red-100 text-red-900 border-red-300 dark:bg-red-950/40 dark:text-red-300",
-    dot: "bg-red-500",
-  },
-};
-
-function StatusBadge({ status }: { status: string }) {
-  const cfg = STATUS_CONFIG[status] ?? {
-    label: status.replace("_", " "),
-    badge: "bg-muted text-muted-foreground border-border",
-    dot: "bg-muted-foreground",
-  };
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${cfg.badge}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot} shrink-0`} />
-      {cfg.label}
-    </span>
-  );
-}
-
 function getInitials(name?: string | null, email?: string | null): string {
   if (name && name.trim()) {
     const parts = name.trim().split(" ");
@@ -117,6 +78,7 @@ interface AppointmentDetailViewProps {
   onStartEncounter?: () => Promise<void>;
   existingEncounter?: { id: string; status: string } | null;
   encounterDetails?: any;
+  slotUsage?: SlotUsage | null;
 }
 
 export function AppointmentDetailView({
@@ -127,7 +89,11 @@ export function AppointmentDetailView({
   onStartEncounter,
   existingEncounter,
   encounterDetails,
+  slotUsage,
 }: AppointmentDetailViewProps) {
+  const [isApproving, setIsApproving] = React.useState(false);
+  const canApprove = userRole === "admin" || userRole === "staff";
+  const slotFull = slotUsage ? slotUsage.approved >= slotUsage.capacity : false;
   const [activeTab, setActiveTab] = React.useState<"pets" | "history">("pets");
   const [isStarting, setIsStarting] = React.useState(false);
   const [showCancelModal, setShowCancelModal] = React.useState(false);
@@ -136,7 +102,7 @@ export function AppointmentDetailView({
   const isClinicTeam = userRole === "admin" || userRole === "staff" || userRole === "veterinarian";
   // Billing is the front desk's job (Admin/Staff); vets do the medical work.
   const canBill = userRole === "admin" || userRole === "staff";
-  // A new encounter only makes sense for a visit that is still booked.
+  // A new encounter only makes sense for an approved visit (status `booked`).
   const canStartEncounter = appointment.status === "booked";
 
   const owner = appointment.owner || appointment.profiles;
@@ -177,6 +143,18 @@ export function AppointmentDetailView({
                 View Prescription
               </Link>
             )
+          ) : isClinicTeam && appointment.status === "requested" ? (
+            <Button
+              data-testid="start-encounter-locked"
+              variant="outline"
+              size="sm"
+              className="gap-2 text-xs bg-muted text-muted-foreground"
+              disabled
+              title="Approve the appointment first. Encounters can only start for approved appointments."
+            >
+              <Stethoscope className="h-3.5 w-3.5" />
+              Start Encounter (approve first)
+            </Button>
           ) : (
             isClinicTeam && canStartEncounter && onStartEncounter && (
               <Button
@@ -258,12 +236,57 @@ export function AppointmentDetailView({
           </h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge status={appointment.status} />
+          <AppointmentStatusBadge status={appointment.status} size="md" />
           {appointment.auto_cancelled && <AutoCancelledBadge />}
         </div>
       </div>
 
       {appointment.auto_cancelled && <AutoCancelledNotice className="text-sm" />}
+
+      {appointment.status === "requested" && (
+        <div
+          data-testid="approval-panel"
+          className="flex flex-col gap-4 rounded-2xl border-2 border-dashed border-primary/40 bg-primary/5 p-5 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex items-start gap-3">
+            <Hourglass className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-foreground">Pending clinic approval</p>
+              <p className="text-xs text-muted-foreground">
+                {userRole === "owner"
+                  ? "Your request was sent. The clinic will approve it; if it is still pending after the date, it is cancelled automatically."
+                  : slotUsage
+                    ? `${slotUsage.approved} of ${slotUsage.capacity} places in this schedule are approved.`
+                    : "Admin or Staff approve requests within the schedule's limit."}
+              </p>
+            </div>
+          </div>
+          {userRole !== "owner" && (
+            <Button
+              data-testid="approve-appointment"
+              variant={canApprove ? "default" : "outline"}
+              className={`min-h-12 shrink-0 gap-2 ${canApprove ? "" : "bg-muted text-muted-foreground"}`}
+              disabled={!canApprove || slotFull || isApproving}
+              title={!canApprove ? "Only Admin or Staff can approve appointments" : undefined}
+              onClick={async () => {
+                setIsApproving(true);
+                try {
+                  await approveAppointment(appointment.id);
+                  toast.success("Appointment approved");
+                  router.refresh();
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "Could not approve this appointment.");
+                } finally {
+                  setIsApproving(false);
+                }
+              }}
+            >
+              {isApproving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              {slotFull ? `Slot full (${slotUsage?.approved}/${slotUsage?.capacity})` : "Approve appointment"}
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* ── Section 1: User (Owner) & Appointment Quick Overview ── */}
       <div className="grid gap-4 md:grid-cols-2">
@@ -512,7 +535,6 @@ export function AppointmentDetailView({
               <div className="space-y-3">
                 {ownerAppointments.map((app: any) => {
                   const isCurrent = app.id === appointment.id;
-                  const appCfg = STATUS_CONFIG[app.status] || { label: app.status, badge: "bg-muted text-muted-foreground" };
                   return (
                     <div
                       key={app.id}
@@ -532,7 +554,7 @@ export function AppointmentDetailView({
                           )}
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <StatusBadge status={app.status} />
+                          <AppointmentStatusBadge status={app.status} />
                           {app.auto_cancelled && <AutoCancelledBadge />}
                         </div>
                       </div>

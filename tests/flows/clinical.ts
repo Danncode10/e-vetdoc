@@ -16,8 +16,16 @@ export async function runVetClinicalFlow(page: Page) {
   await page.goto('/dashboard?tab=appointments');
   await expect(page.locator('text=Appointments').first()).toBeVisible({ timeout: 10000 });
 
-  // Encounters start only from booked visits, so open a booked one (from the owner booking flow).
-  await page.getByRole('button', { name: /^Booked/ }).click();
+  // The owner's request (reason "Checkup test") must be approved by Admin/Staff first.
+  await page.getByTestId('status-filter-requested').click();
+  const pendingCard = page.locator('[data-testid^="appointment-card-"]').filter({ hasText: 'Checkup test' }).first();
+  if (await pendingCard.waitFor({ timeout: 15000 }).then(() => true, () => false)) {
+    await pendingCard.getByTestId('approve-appointment').click();
+    await expect(page.getByText('Appointment approved').first()).toBeVisible({ timeout: 15000 });
+  }
+
+  // Encounters start only from approved visits, so open an approved one.
+  await page.getByTestId('status-filter-booked').click();
   await expect(page.getByRole('button', { name: 'View details' }).first()).toBeVisible({ timeout: 15000 });
   await page.getByRole('button', { name: 'View details' }).first().click();
   

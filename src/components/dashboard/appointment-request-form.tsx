@@ -23,7 +23,7 @@ import { toast } from "sonner";
 import { requestAppointment } from "@/services/appointments";
 import { listPetsForCurrentUser } from "@/services/pets";
 import { listServices } from "@/services/services";
-import { getAvailableSlots, listAppointmentSchedules } from "@/services/appointments";
+import { getAvailableSlots, listAppointmentSchedules, listMyBookedDates } from "@/services/appointments";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
@@ -41,6 +41,8 @@ type SlotOption = {
   currentBookings: number;
   available: number;
   isAvailable: boolean;
+  hasEnded: boolean;
+  pendingCount: number;
   label: string;
 };
 
@@ -134,13 +136,21 @@ function StepBar({ current }: { current: number }) {
 interface MiniCalendarProps {
   scheduleMap: Map<string, any>; // dateStr → schedule
   fullDates: Set<string>; // dates whose every open slot has reached its booking limit
+  endedDates: Set<string>; // today, once every open slot on it has ended
+  bookedDates: Set<string>; // dates on which this owner already has an appointment
   selectedDate: string;
   onSelect: (dateStr: string) => void;
 }
 
-function MiniCalendar({ scheduleMap, fullDates, selectedDate, onSelect }: MiniCalendarProps) {
-  const todayObj = new Date();
-  const todayStr = toYYYYMMDD(todayObj.getFullYear(), todayObj.getMonth(), todayObj.getDate());
+/** Today in the clinic's timezone (same "today" the server uses for booking rules). */
+function clinicTodayStr() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date());
+}
+
+function MiniCalendar({ scheduleMap, fullDates, endedDates, bookedDates, selectedDate, onSelect }: MiniCalendarProps) {
+  const todayStr = clinicTodayStr();
+  const [todayYear, todayMonth] = todayStr.split("-").map(Number);
+  const todayObj = new Date(todayYear, todayMonth - 1, 1);
 
   const [viewYear, setViewYear] = useState(todayObj.getFullYear());
   const [viewMonth, setViewMonth] = useState(todayObj.getMonth());
@@ -208,8 +218,10 @@ function MiniCalendar({ scheduleMap, fullDates, selectedDate, onSelect }: MiniCa
 
           const isPast = dateStr < todayStr;
           const schedule = scheduleMap.get(dateStr) ?? null;
-          const isFull = !isPast && fullDates.has(dateStr);
-          const hasOpen = schedule && !schedule.is_closed && !isFull;
+          const isMine = !isPast && bookedDates.has(dateStr);
+          const isEnded = !isPast && !isMine && endedDates.has(dateStr);
+          const isFull = !isPast && !isMine && !isEnded && fullDates.has(dateStr);
+          const hasOpen = schedule && !schedule.is_closed && !isFull && !isMine && !isEnded;
           const isClosed = schedule && schedule.is_closed;
           const isSelected = dateStr === selectedDate;
           const isToday = dateStr === todayStr;
@@ -225,6 +237,8 @@ function MiniCalendar({ scheduleMap, fullDates, selectedDate, onSelect }: MiniCa
                 relative min-h-[56px] flex flex-col items-center justify-center rounded-xl p-1 transition-all duration-150
                 ${isSelected
                   ? "bg-primary text-primary-foreground font-bold shadow-md ring-2 ring-primary ring-offset-2 scale-105 z-10"
+                  : isMine
+                  ? "bg-primary/10 text-primary border-2 border-primary/40 font-semibold cursor-not-allowed"
                   : isFull
                   ? "bg-destructive/10 text-destructive border border-destructive/40 font-semibold cursor-not-allowed"
                   : hasOpen && !isPast
@@ -236,9 +250,14 @@ function MiniCalendar({ scheduleMap, fullDates, selectedDate, onSelect }: MiniCa
                   : "bg-muted/20 text-foreground/70 border border-border/50 font-medium cursor-not-allowed hover:bg-muted/30"
                 }
               `}
+              data-date={dateStr}
               title={
                 isPast
                   ? "Past date"
+                  : isMine
+                  ? "This pet already has an appointment on this day"
+                  : isEnded
+                  ? "Booking hours for today have ended"
                   : isFull
                   ? "Fully booked"
                   : hasOpen
@@ -255,6 +274,10 @@ function MiniCalendar({ scheduleMap, fullDates, selectedDate, onSelect }: MiniCa
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 mt-1" />
               )}
               {isFull && <span className="text-[9px] font-bold uppercase leading-none mt-0.5">Full</span>}
+              {isMine && <span className="text-[9px] font-bold uppercase leading-none mt-0.5">Booked</span>}
+              {isToday && !isMine && !isSelected && (
+                <span className="text-[9px] font-semibold uppercase leading-none mt-0.5 text-muted-foreground">Today</span>
+              )}
             </button>
           );
         })}
@@ -269,6 +292,10 @@ function MiniCalendar({ scheduleMap, fullDates, selectedDate, onSelect }: MiniCa
         <div className="flex items-center gap-2">
           <div className="w-3.5 h-3.5 rounded-md bg-destructive/10 border border-destructive/40" />
           <span className="text-xs font-semibold text-destructive">Full</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3.5 h-3.5 rounded-md bg-primary/10 border-2 border-primary/40" />
+          <span className="text-xs font-semibold text-primary">Pet already booked</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-3.5 h-3.5 rounded-md bg-muted/40 border border-border/60" />
@@ -340,6 +367,28 @@ export function AppointmentRequestForm() {
       }
     }
     return map;
+  }, [schedulesQuery.data]);
+
+  // Each pet can be booked once per day, so days this pet is already booked are blocked.
+  const bookedDatesQuery = useQuery({
+    queryKey: ["my-booked-dates"],
+    queryFn: () => listMyBookedDates(),
+    refetchOnWindowFocus: true,
+  });
+  const bookedDates = React.useMemo(
+    () => new Set((bookedDatesQuery.data ?? []).filter((b) => b.petId === formData.petId).map((b) => b.date)),
+    [bookedDatesQuery.data, formData.petId],
+  );
+
+  // Same-day booking stays open until today's last slot ends.
+  const endedDates = React.useMemo(() => {
+    const openByDate = new Map<string, boolean[]>();
+    for (const s of schedulesQuery.data ?? []) {
+      if (!s.specific_date || s.is_closed) continue;
+      const date = String(s.specific_date).slice(0, 10);
+      openByDate.set(date, [...(openByDate.get(date) ?? []), s.has_ended]);
+    }
+    return new Set([...openByDate].filter(([, ended]) => ended.every(Boolean)).map(([date]) => date));
   }, [schedulesQuery.data]);
 
   // A date is full once every open slot on it has reached its booking limit.
@@ -433,7 +482,7 @@ export function AppointmentRequestForm() {
         reason: formData.reason,
         notes: formData.notes,
       });
-      toast.success("Appointment booked! Your slot is confirmed.");
+      toast.success("Appointment requested! The clinic will approve it soon.");
       router.push("/dashboard?tab=appointments");
       router.refresh();
     } catch (err: any) {
@@ -441,6 +490,7 @@ export function AppointmentRequestForm() {
       // Someone may have taken the last place meanwhile: show the latest availability.
       void queryClient.invalidateQueries({ queryKey: ["appointment-schedules"] });
       void queryClient.invalidateQueries({ queryKey: ["available-slots"] });
+      void queryClient.invalidateQueries({ queryKey: ["my-booked-dates"] });
       setFormError(msg);
       toast.error(msg);
     } finally {
@@ -593,7 +643,9 @@ export function AppointmentRequestForm() {
               </div>
               <div>
                 <h2 className="text-base font-semibold text-foreground">Pick a date</h2>
-                <p className="text-xs text-muted-foreground">Green dates have open appointment slots.</p>
+                <p className="text-xs text-muted-foreground">
+                  Green dates have open slots, including today until its last slot ends. Each pet can be booked once per day.
+                </p>
               </div>
             </div>
 
@@ -605,6 +657,8 @@ export function AppointmentRequestForm() {
               <MiniCalendar
                 scheduleMap={scheduleMap}
                 fullDates={fullDates}
+                endedDates={endedDates}
+                bookedDates={bookedDates}
                 selectedDate={formData.preferredDate}
                 onSelect={(d) => {
                   set("preferredDate", d);
@@ -679,9 +733,15 @@ export function AppointmentRequestForm() {
                         </span>
                         {isSelected && <CheckCircle2 className="w-4 h-4 text-primary" />}
                         {!slot.isAvailable && (
-                          <span className="text-[10px] font-medium text-destructive px-1.5 py-0.5 rounded-full bg-destructive/10">
-                            Full
-                          </span>
+                          slot.hasEnded ? (
+                            <span className="text-[10px] font-medium text-muted-foreground px-1.5 py-0.5 rounded-full bg-muted">
+                              Ended
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-medium text-destructive px-1.5 py-0.5 rounded-full bg-destructive/10">
+                              Full
+                            </span>
+                          )
                         )}
                       </div>
 
@@ -690,12 +750,13 @@ export function AppointmentRequestForm() {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1 text-xs text-muted-foreground">
                             <Users className="w-3 h-3" />
-                            <span>{slot.currentBookings}/{slot.maxCapacity} booked</span>
+                            <span>{slot.currentBookings}/{slot.maxCapacity} approved</span>
+                            {slot.pendingCount > 0 && <span className="text-muted-foreground/80">· {slot.pendingCount} pending</span>}
                           </div>
                           <span className={`text-[10px] font-medium ${
                             slot.isAvailable ? "text-green-600 dark:text-green-400" : "text-destructive"
                           }`}>
-                            {slot.isAvailable ? `${slot.available} left` : "No slots"}
+                            {slot.isAvailable ? `${slot.available} left` : slot.hasEnded ? "Slot ended" : "No slots"}
                           </span>
                         </div>
                         <div className="h-1.5 rounded-full bg-muted overflow-hidden">

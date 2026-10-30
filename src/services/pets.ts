@@ -340,3 +340,18 @@ export async function searchPets(query: string, limit = 20) {
   if (error) throw error;
   return data;
 }
+
+/**
+ * Admin only: permanently deletes an owner account and all of its data (login, profile,
+ * sole-owned pets, appointments, clinical records, invoices). Shared pets are kept.
+ * The database function `admin_delete_owner()` checks the role and runs in one transaction.
+ */
+export async function deleteOwnerCompletely(ownerId: string) {
+  const { profile } = await requireAuth();
+  if (profile.role !== "admin") throw new Error("Only an Administrator can delete owner accounts.");
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_delete_owner", { p_owner_id: ownerId });
+  if (error) throw new Error(error.message);
+  revalidatePath("/dashboard");
+  return { email: data };
+}
