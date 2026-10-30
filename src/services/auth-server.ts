@@ -3,6 +3,9 @@
 import { createClient } from '@/utils/supabase/server';
 import { verifyRateLimit } from '@/lib/ratelimit';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import { verifyCaptcha } from '@/services/captcha';
+import { isUserRole } from '@/lib/roles';
+import { ACCOUNT_STATE_MESSAGES, getAccountState } from '@/lib/account-status';
 
 const MIN_PASSWORD_SCORE = 3;
 
@@ -27,6 +30,17 @@ export async function signInWithEmailRateLimited(email: string, password: string
 
   if (signInError) return { error: signInError.message };
 
+  // Accounts must be approved by the clinic before they can sign in.
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: profile } = user
+    ? await supabase.from('profiles').select('approval_status, is_active').eq('id', user.id).single()
+    : { data: null };
+  const accountState = profile ? getAccountState(profile) : 'pending';
+  if (accountState !== 'approved') {
+    await supabase.auth.signOut();
+    return { error: ACCOUNT_STATE_MESSAGES[accountState].message, accountState };
+  }
+
   const { data: mfaData, error: mfaError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
   if (mfaError) return { error: mfaError.message };
 
@@ -41,12 +55,20 @@ export async function signUpWithEmailRateLimited(
   email: string,
   password: string,
   origin: string,
-  fullName?: string,
+  fullName: string | undefined,
+  requestedRole: string,
+  captchaToken?: string,
 ) {
   const { success } = await verifyRateLimit(email, "sign-up");
   if (!success) return { error: 'Too many signup attempts. Try again in a few moments.' };
+  if (!isUserRole(requestedRole)) {
+    return { error: 'Choose what you are registering as.' };
+  }
   if (getPasswordScore(password) < MIN_PASSWORD_SCORE) {
     return { error: 'Use a stronger password before creating your account.' };
+  }
+  if (!(await verifyCaptcha(captchaToken))) {
+    return { error: 'Please complete the "I\'m not a robot" check and try again.' };
   }
 
   const supabase = await createClient();
@@ -59,9 +81,14 @@ export async function signUpWithEmailRateLimited(
       // with ?code=... → our /auth/callback route exchanges it for a session
       // → then redirects to the verified owner's profile-completion flow.
       emailRedirectTo: `${origin}/auth/callback?next=/onboarding`,
-      data: trimmedFullName
-        ? { full_name: trimmedFullName, name: trimmedFullName, display_name: trimmedFullName }
-        : undefined,
+      // The requested role is only a request: the account stays pending until an
+      // Admin or Staff member approves it (see handle_new_user()).
+      data: {
+        requested_role: requestedRole,
+        ...(trimmedFullName
+          ? { full_name: trimmedFullName, name: trimmedFullName, display_name: trimmedFullName }
+          : {}),
+      },
     },
   });
   if (error) return { error: error.message };

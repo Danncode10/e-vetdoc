@@ -21,7 +21,7 @@ function fmtDate(d: string) {
 async function sendTransactionalEmail(options: {
   to: string;
   subject: string;
-  templateName: "invoice-created.html" | "invoice-paid.html";
+  templateName: "invoice-created.html" | "invoice-paid.html" | "account-approved.html";
   variables: Record<string, string>;
   items: Array<{ description: string; quantity: number; unitPrice: string }>;
 }) {
@@ -240,5 +240,20 @@ export async function sendInvoicePaidEmail(invoiceId: string) {
       invoiceUrl: `${siteUrl}/dashboard/billing/${invoice.id}`,
     },
     items: formattedItems,
+  });
+}
+
+/**
+ * Let a newly approved user know they can sign in. Failures are logged by
+ * sendTransactionalEmail and never block the approval itself.
+ */
+export async function sendAccountApprovedEmail(options: { to: string; name: string; role: string }) {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+  await sendTransactionalEmail({
+    to: options.to,
+    subject: "Your E-VetDoc account is approved",
+    templateName: "account-approved.html",
+    variables: { name: options.name, role: options.role, loginUrl: `${siteUrl}/login` },
+    items: [],
   });
 }

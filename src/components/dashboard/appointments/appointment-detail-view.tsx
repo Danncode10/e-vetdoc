@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cancelAppointment } from "@/services/appointments";
 import { CancelModal } from "@/components/dashboard/appointments/cancel-modal";
+import { cancelAudienceFor } from "@/lib/cancellation-reasons";
 import { QuickBillingDialog } from "@/components/dashboard/billing/quick-billing-dialog";
 import { useRouter } from "next/navigation";
 function fmtDate(iso: string) {
@@ -131,6 +132,7 @@ export function AppointmentDetailView({
   const [showCancelModal, setShowCancelModal] = React.useState(false);
   const [showBillingDialog, setShowBillingDialog] = React.useState(false);
   const router = useRouter();
+  const isClinicTeam = userRole === "admin" || userRole === "staff" || userRole === "veterinarian";
 
   const owner = appointment.owner || appointment.profiles;
   const petProfile = appointment.pets;
@@ -153,7 +155,7 @@ export function AppointmentDetailView({
         </Link>
         <div className="flex items-center gap-2">
           {existingEncounter ? (
-            userRole === "admin" || userRole === "veterinarian" ? (
+            isClinicTeam ? (
               <Link
                 href={`/dashboard/encounters/${existingEncounter.id}`}
                 className="inline-flex items-center gap-2 text-xs h-9 px-3 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm font-medium"
@@ -171,7 +173,7 @@ export function AppointmentDetailView({
               </Link>
             )
           ) : (
-            (userRole === "admin" || userRole === "veterinarian") && onStartEncounter && (
+            (isClinicTeam) && onStartEncounter && (
               <Button
                 variant="default"
                 size="sm"
@@ -202,7 +204,7 @@ export function AppointmentDetailView({
             Print Details
           </Button>
           {/* ── Charge & Mark Paid button ── */}
-          {(userRole === "admin" || userRole === "veterinarian") && (
+          {(isClinicTeam) && (
             <button
               onClick={() => {
                 if (appointment.status !== "diagnosed") {
@@ -227,7 +229,7 @@ export function AppointmentDetailView({
       </div>
 
       {/* ── Quick Billing Dialog ── */}
-      {(userRole === "admin" || userRole === "veterinarian") && (
+      {(isClinicTeam) && (
         <QuickBillingDialog
           appointmentId={appointment.id}
           ownerId={appointment.owner_id}
@@ -438,12 +440,14 @@ export function AppointmentDetailView({
             </div>
 
             {/* Cancel Appointment Button */}
-            {["booked", "requested", "scheduled", "confirmed"].includes(appointment.status) && (
+            {userRole !== "veterinarian" && ["booked", "requested", "scheduled", "confirmed"].includes(appointment.status) && (
               <div className="mt-8 rounded-xl border border-destructive/20 bg-destructive/5 p-5 flex items-center justify-between gap-4">
                 <div>
                   <h4 className="text-sm font-semibold text-destructive">Cancel this appointment</h4>
                   <p className="text-xs text-muted-foreground mt-1">
-                    This action cannot be undone. You will need to book a new appointment if you change your mind.
+                    {userRole === "owner"
+                      ? "This action cannot be undone. You will need to book a new appointment if you change your mind."
+                      : "This action cannot be undone. The owner will need to book a new appointment."}
                   </p>
                 </div>
                 <Button
@@ -463,6 +467,7 @@ export function AppointmentDetailView({
         {showCancelModal && (
           <CancelModal
             appointment={appointment}
+            audience={cancelAudienceFor(userRole)}
             onClose={() => setShowCancelModal(false)}
             onConfirm={async (reason) => {
               try {

@@ -56,6 +56,7 @@ export function OwnersTab({ role }: { role: UserRole }) {
   const [error, setError] = React.useState<string | null>(null);
   const [currentPage, setCurrentPage] = React.useState(1);
   const PAGE_SIZE = 6;
+  const isClinicRole = role === "admin" || role === "staff" || role === "veterinarian";
 
   React.useEffect(() => {
     const loadOwners = async () => {
@@ -70,15 +71,15 @@ export function OwnersTab({ role }: { role: UserRole }) {
       }
     };
 
-    if (role === "admin" || role === "veterinarian") void loadOwners();
-  }, [role]);
+    if (isClinicRole) void loadOwners();
+  }, [isClinicRole]);
 
   // Reset page when query changes
   React.useEffect(() => {
     setCurrentPage(1);
   }, [query]);
 
-  if (role !== "admin" && role !== "veterinarian") return null;
+  if (!isClinicRole) return null;
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredOwners = owners.filter((owner) => {

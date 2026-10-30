@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { getStaffPetRecord } from "@/services/pets";
 import { getPetClinicalHistory } from "@/services/clinical";
-import { requireRole } from "@/services/authorization";
+import { requireRole, CLINIC_ROLES } from "@/services/authorization";
 import { notFound } from "next/navigation";
 
 function fmtDate(isoOrDate: string | Date | null | undefined) {
@@ -50,7 +50,7 @@ export default async function PetRecordPage({
   params: Promise<{ ownerId: string; petId: string }>;
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  await requireRole(["admin", "veterinarian"]);
+  await requireRole(CLINIC_ROLES);
   const { ownerId, petId } = await params;
   const resolvedSearchParams = await searchParams;
   const isFromPets = resolvedSearchParams?.from === "pets";

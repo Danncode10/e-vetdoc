@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient, createClient } from "@/utils/supabase/server";
 import type { Database, Json, Tables } from "@/types/supabase";
 
-type StaffRole = Extract<Database["public"]["Enums"]["user_role"], "admin" | "veterinarian">;
+type StaffRole = Extract<Database["public"]["Enums"]["user_role"], "admin" | "staff" | "veterinarian">;
 type ManageableRole = StaffRole | "owner";
 type Profile = Tables<"profiles">;
 
@@ -21,12 +21,24 @@ export type StaffActionResult = {
 
 type StaffAuditAction = "staff_added" | "staff_updated" | "staff_deactivated" | "staff_reactivated";
 
+const STAFF_ROLES: readonly StaffRole[] = ["admin", "staff", "veterinarian"];
+
+function isStaffRole(value: string | null): value is StaffRole {
+  return STAFF_ROLES.includes(value as StaffRole);
+}
+
 function parseStaffRole(value: string): StaffRole | null {
-  return value === "admin" || value === "veterinarian" ? value : null;
+  return isStaffRole(value) ? value : null;
 }
 
 function parseManageableRole(value: string): ManageableRole | null {
-  return value === "admin" || value === "veterinarian" || value === "owner" ? value : null;
+  return isStaffRole(value) || value === "owner" ? value : null;
+}
+
+function describeRole(role: StaffRole) {
+  if (role === "admin") return "an administrator";
+  if (role === "staff") return "a staff member";
+  return "a veterinarian";
 }
 
 function toJson(value: Record<string, string | boolean | null>): Json {
@@ -110,7 +122,7 @@ export async function listStaff(): Promise<StaffMember[]> {
   const { data, error } = await adminClient
     .from("profiles")
     .select("id, email, full_name, role, is_active, created_at")
-    .in("role", ["admin", "veterinarian"])
+    .in("role", [...STAFF_ROLES])
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -130,7 +142,7 @@ export async function addExistingStaff(input: { email: string; role: string }): 
       return { error: "Enter a valid staff email address." };
     }
     if (!role) {
-      return { error: "Choose an administrator or veterinarian role." };
+      return { error: "Choose an administrator, staff, or veterinarian role." };
     }
 
     const adminClient = createAdminClient();
@@ -146,14 +158,20 @@ export async function addExistingStaff(input: { email: string; role: string }): 
     if (!target) {
       return { error: "No account found for this email. Ask the person to create an account first." };
     }
-    if (target.role !== "owner" && target.role !== "admin" && target.role !== "veterinarian") {
+    if (target.role !== "owner" && !isStaffRole(target.role)) {
       return { error: "That account cannot be added as clinic staff." };
     }
 
     await assertNotFinalActiveAdmin(target, role, true);
     const { error: profileError } = await adminClient
       .from("profiles")
-      .update({ role, is_active: true })
+      .update({
+        role,
+        is_active: true,
+        approval_status: "approved",
+        approved_by: actor.id,
+        approved_at: new Date().toISOString(),
+      })
       .eq("id", target.id);
 
     if (profileError) {
@@ -168,7 +186,7 @@ export async function addExistingStaff(input: { email: string; role: string }): 
       { email: target.email, full_name: target.full_name, role, is_active: true },
     );
     revalidatePath("/dashboard/team");
-    return { success: `${email} is now ${role === "admin" ? "an administrator" : "a veterinarian"}.` };
+    return { success: `${email} is now ${describeRole(role)}.` };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Could not add staff." };
   }
@@ -189,7 +207,7 @@ export async function updateStaffRole(input: { id: string; role: string }): Prom
       .eq("id", input.id)
       .single();
 
-    if (targetError || !target || (target.role !== "admin" && target.role !== "veterinarian")) {
+    if (targetError || !target || !isStaffRole(target.role)) {
       return { error: "That staff account is not available." };
     }
 
@@ -231,7 +249,7 @@ export async function setStaffActive(input: { id: string; isActive: boolean }): 
       .eq("id", input.id)
       .single();
 
-    if (targetError || !target || (target.role !== "admin" && target.role !== "veterinarian")) {
+    if (targetError || !target || !isStaffRole(target.role)) {
       return { error: "That staff account is not available." };
     }
 

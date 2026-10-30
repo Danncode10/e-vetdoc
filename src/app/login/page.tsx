@@ -7,6 +7,8 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { Mail, Lock, User, Eye, EyeOff, ArrowRight, Loader2, Check } from 'lucide-react';
+import { TurnstileWidget } from '@/components/auth/turnstile-widget';
+import { REGISTRATION_ROLES, type UserRole } from '@/lib/roles';
 
 type AuthMode = 'login' | 'signup' | 'recovery';
 
@@ -56,6 +58,9 @@ export default function AuthPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [requestedRole, setRequestedRole] = useState<UserRole>('owner');
+  const [captchaToken, setCaptchaToken] = useState('');
+  const [captchaKey, setCaptchaKey] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState(false);
@@ -101,6 +106,8 @@ export default function AuthPage() {
     if (m !== 'recovery') setEmail('');
     setPassword('');
     setName('');
+    setRequestedRole('owner');
+    setCaptchaToken('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -144,11 +151,23 @@ export default function AuthPage() {
           }, 800);
         }
       } else {
-        const result = await signUpWithEmailRateLimited(email, password, window.location.origin, name.trim());
-        if (result.error) throw new Error(result.error);
+        const result = await signUpWithEmailRateLimited(
+          email,
+          password,
+          window.location.origin,
+          name.trim(),
+          requestedRole,
+          captchaToken,
+        );
+        if (result.error) {
+          // Captcha tokens are single-use, so get a fresh one for the next attempt.
+          setCaptchaToken('');
+          setCaptchaKey(k => k + 1);
+          throw new Error(result.error);
+        }
         setSuccess(true);
         setTimeout(() => {
-          toast.success('Account created!', { description: 'Check your email for confirmation.' });
+          toast.success('Account created!', { description: 'Confirm your email, then wait for clinic approval.' });
         }, 800);
       }
     } catch (err: unknown) {
@@ -520,11 +539,66 @@ export default function AuthPage() {
                   {mode === 'login' ? 'Welcome back!' : 'Account created!'}
                 </p>
                 <p style={{ fontSize: 12, color: 'var(--color-muted-foreground)' }}>
-                  {mode === 'login' ? 'Opening your clinic workspace…' : 'Check your email to confirm your account.'}
+                  {mode === 'login'
+                    ? 'Opening your clinic workspace…'
+                    : 'Check your email to confirm your account. An Admin or Staff member must approve it before you can sign in.'}
                 </p>
               </div>
             ) : (
               <form key={formKey} onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {mode === 'signup' && (
+                  <fieldset style={{ border: 'none', margin: 0, padding: 0, animation: 'slideIn 0.25s ease both' }}>
+                    <legend style={{ display: 'block', fontSize: 11, fontWeight: 600, letterSpacing: 0.08, textTransform: 'uppercase', color: 'var(--color-muted-foreground)', marginBottom: 6, padding: 0 }}>
+                      Register as
+                    </legend>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
+                      {REGISTRATION_ROLES.map(option => {
+                        const selected = requestedRole === option.value;
+                        return (
+                          <label
+                            key={option.value}
+                            htmlFor={`register-as-${option.value}`}
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: 'auto 1fr',
+                              columnGap: 8,
+                              rowGap: 2,
+                              alignItems: 'center',
+                              minHeight: 48,
+                              padding: '10px 12px',
+                              borderRadius: 9,
+                              cursor: 'pointer',
+                              background: selected ? 'color-mix(in srgb, var(--color-primary) 8%, var(--color-card))' : 'var(--color-card)',
+                              border: `1px solid ${selected ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                              boxShadow: selected ? '0 0 0 1px var(--color-primary)' : 'none',
+                              transition: 'all 0.18s',
+                            }}
+                          >
+                            <input
+                              id={`register-as-${option.value}`}
+                              type="radio"
+                              name="requested_role"
+                              value={option.value}
+                              checked={selected}
+                              onChange={() => setRequestedRole(option.value)}
+                              style={{ margin: 0, width: 16, height: 16, accentColor: 'var(--color-primary)' }}
+                            />
+                            <span style={{ fontSize: 13, fontWeight: 600, color: selected ? 'var(--color-primary)' : 'var(--color-foreground)' }}>
+                              {option.label}
+                            </span>
+                            <span style={{ gridColumn: '1 / -1', fontSize: 11, lineHeight: 1.35, color: 'var(--color-muted-foreground)' }}>
+                              {option.description}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <p style={{ fontSize: 11, marginTop: 6, color: 'var(--color-muted-foreground)' }}>
+                      New accounts stay pending until an Admin or Staff member approves them.
+                    </p>
+                  </fieldset>
+                )}
+
                 {mode === 'signup' && (
                   <div style={{ animation: 'slideIn 0.25s ease both' }}>
                     <label style={{ display: 'block', fontSize: 11, fontWeight: 600, letterSpacing: 0.08, textTransform: 'uppercase', color: 'var(--color-muted-foreground)', marginBottom: 6 }}>
@@ -686,6 +760,8 @@ export default function AuthPage() {
                     </button>
                   </div>
                 )}
+
+                {mode === 'signup' && <TurnstileWidget key={captchaKey} onToken={setCaptchaToken} />}
 
                 {error && (
                   <div style={{

@@ -3,7 +3,7 @@
 import "server-only";
 
 import { createClient, createAdminClient } from "@/utils/supabase/server";
-import { requireRole } from "@/services/authorization";
+import { requireRole, ADMIN_STAFF_ROLES } from "@/services/authorization";
 
 export type LogCategory = "all" | "appointment" | "clinical" | "billing" | "staff";
 
@@ -42,7 +42,7 @@ export interface ActivityLogFilters {
 export async function getClinicActivityLogs(
   filters: ActivityLogFilters = {}
 ): Promise<ClinicActivityLog[]> {
-  await requireRole(["admin"]);
+  await requireRole(ADMIN_STAFF_ROLES);
 
   const adminClient = createAdminClient();
   const limit = filters.limit ?? 250;
@@ -304,11 +304,16 @@ export async function getClinicActivityLogs(
         id: `staff-${sl.id}`,
         category: "staff",
         action: sl.action.replace(/_/g, " ").toUpperCase(),
-        description: `${actorName} modified staff profile for ${targetName}.`,
+        description:
+          sl.action === "registration_approved"
+            ? `${actorName} approved the registration of ${targetName}.`
+            : sl.action === "registration_rejected"
+              ? `${actorName} disapproved the registration of ${targetName}.`
+              : `${actorName} modified staff profile for ${targetName}.`,
         actor: {
           id: sl.actor_id,
           name: actorName,
-          role: "admin",
+          role: (sl.actor as { role?: string } | null)?.role ?? "admin",
           email: (sl.actor as any)?.email ?? null,
         },
         target: {

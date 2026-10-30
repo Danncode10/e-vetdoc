@@ -2,7 +2,7 @@
 
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
-import { requireAuth, requireRole } from "@/services/authorization";
+import { requireAuth, requireRole, CLINIC_ROLES } from "@/services/authorization";
 import type { Tables, TablesInsert } from "@/types/supabase";
 import { sendInvoiceCreatedEmail, sendInvoicePaidEmail } from "./email";
 
@@ -20,7 +20,7 @@ const VAT_RATE = 0.12;
 
 // --- Staff guard ---
 async function requireStaff() {
-  const { profile } = await requireRole(["admin", "veterinarian"]);
+  const { profile } = await requireRole(CLINIC_ROLES);
   return profile;
 }
 

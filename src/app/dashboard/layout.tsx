@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getCurrentUser, isOwnerProfileComplete } from "@/services/authorization";
+import { getSessionProfile, isAccountApproved, isOwnerProfileComplete } from "@/services/authorization";
 import { redirect } from "next/navigation";
 import { DashboardShell } from "@/components/dashboard-shell";
 
@@ -15,13 +15,17 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await getCurrentUser();
+  const session = await getSessionProfile();
 
   if (!session?.user) {
     redirect("/login");
   }
 
   const { user, profile } = session;
+
+  if (!isAccountApproved(profile)) {
+    redirect("/account-status");
+  }
 
   if (profile.role === "owner" && !isOwnerProfileComplete(profile)) {
     redirect("/onboarding");

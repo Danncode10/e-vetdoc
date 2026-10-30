@@ -1,4 +1,4 @@
-import { requireRole } from "@/services/authorization";
+import { requireRole, CLINIC_ROLES } from "@/services/authorization";
 import { getEncounterDetails, getPetClinicalHistory } from "@/services/clinical";
 import { notFound } from "next/navigation";
 import { EncounterWorkspace } from "@/components/dashboard/clinical/encounter-workspace";
@@ -9,7 +9,7 @@ export default async function EncounterPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { profile } = await requireRole(["veterinarian", "admin"]);
+  const { profile } = await requireRole(CLINIC_ROLES);
   const { id } = await params;
 
   const encounterData = await getEncounterDetails(id);

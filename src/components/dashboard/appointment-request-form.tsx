@@ -409,7 +409,7 @@ export function AppointmentRequestForm() {
         reason: formData.reason,
         notes: formData.notes,
       });
-      toast.success("Appointment request submitted! The clinic will confirm shortly.");
+      toast.success("Appointment booked! Your slot is confirmed.");
       router.push("/dashboard?tab=appointments");
       router.refresh();
     } catch (err: any) {

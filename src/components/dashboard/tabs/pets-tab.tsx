@@ -104,8 +104,8 @@ export function PetsTab({ role }: { role: UserRole }) {
     return matchesSearch && matchesSpecies;
   });
 
-  const canEdit = role === "owner" || role === "admin";
-  const canOpenRecord = role === "admin" || role === "veterinarian";
+  const canEdit = role === "owner" || role === "admin" || role === "staff";
+  const canOpenRecord = role === "admin" || role === "staff" || role === "veterinarian";
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-6">

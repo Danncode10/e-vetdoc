@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { getOwnerRegistryDetail } from "@/services/pets";
 import { listOwnerAppointments } from "@/services/appointments";
-import { requireRole } from "@/services/authorization";
+import { requireRole, CLINIC_ROLES } from "@/services/authorization";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
@@ -65,7 +65,7 @@ function getInitials(name?: string | null, email?: string | null): string {
 }
 
 export default async function OwnerRecordPage({ params }: { params: Promise<{ ownerId: string }> }) {
-  await requireRole(["admin", "veterinarian"]);
+  await requireRole(CLINIC_ROLES);
   const { ownerId } = await params;
   
   const [owner, appointments] = await Promise.all([
