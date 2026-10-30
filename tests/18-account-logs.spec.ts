@@ -9,11 +9,13 @@ let owner: { id: string; email: string; password: string };
 const newName = `E2E Renamed ${Date.now()}`;
 
 test.beforeAll(async () => {
+  test.setTimeout(120000);
   owner = await createAccount({ requestedRole: 'owner', approveAs: 'owner', fullName: 'E2E Logs Owner' });
   created.push(owner.id);
 });
 
 test.afterAll(async () => {
+  test.setTimeout(120000);
   await deleteAccounts(created);
 });
 

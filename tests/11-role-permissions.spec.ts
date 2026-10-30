@@ -52,12 +52,14 @@ test.describe('appointment management', () => {
   let booking: { petId: string; appointmentId: string };
 
   test.beforeAll(async () => {
+  test.setTimeout(120000);
     const owner = await createAccount({ requestedRole: 'owner', approveAs: 'owner', fullName: 'E2E Booking Owner' });
     ownerId = owner.id;
     booking = await createBookedAppointment(ownerId);
   });
 
   test.afterAll(async () => {
+  test.setTimeout(120000);
     await deleteBookedAppointment(booking);
     await deleteAccounts([ownerId]);
   });

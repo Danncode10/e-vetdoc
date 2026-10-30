@@ -8,6 +8,7 @@ test.describe.configure({ timeout: 120000 });
 const createdEmails: string[] = [];
 
 test.afterAll(async () => {
+  test.setTimeout(120000);
   const db = serviceDb();
   const { data } = await db.from('profiles').select('id').in('email', createdEmails);
   await deleteAccounts((data ?? []).map((row) => row.id));

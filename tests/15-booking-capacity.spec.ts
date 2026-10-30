@@ -58,6 +58,7 @@ async function book(owner: { email: string; password: string; petId: string }) {
 }
 
 test.beforeAll(async () => {
+  test.setTimeout(120000);
   bookingDate = await findFreeDate();
   const { data: service } = await serviceDb().from('services').select('id').eq('slug', 'general-consultation').single();
   serviceId = service!.id;
@@ -81,6 +82,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+  test.setTimeout(120000);
   const db = serviceDb();
   const { data: appts } = await db.from('appointments').select('id').eq('preferred_date', bookingDate);
   const apptIds = (appts ?? []).map((a) => a.id);

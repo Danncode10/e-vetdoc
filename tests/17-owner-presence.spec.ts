@@ -10,6 +10,7 @@ let offline: { id: string; email: string; password: string };
 let pending: { id: string; email: string; password: string };
 
 test.beforeAll(async () => {
+  test.setTimeout(120000);
   online = await createAccount({ requestedRole: 'owner', approveAs: 'owner', fullName: 'E2E Presence Online' });
   offline = await createAccount({ requestedRole: 'owner', approveAs: 'owner', fullName: 'E2E Presence Offline' });
   pending = await createAccount({ requestedRole: 'owner', fullName: 'E2E Presence Pending' });
@@ -22,6 +23,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+  test.setTimeout(120000);
   await deleteAccounts(created);
 });
 
