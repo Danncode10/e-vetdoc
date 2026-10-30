@@ -1059,6 +1059,7 @@ export type Database = {
           role: Database["public"]["Enums"]["user_role"]
         }[]
       }
+      consume_captcha_challenge: { Args: { p_nonce: string }; Returns: boolean }
       create_owned_pet: {
         Args: {
           p_age?: number

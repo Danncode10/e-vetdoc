@@ -113,7 +113,9 @@ top bar on phones).
   Veterinarian, or Owner.
 - Email confirmation, then the account stays **Pending** until the clinic approves it.
   Pending/disapproved users cannot sign in; they see an *account status* page instead.
-- **Captcha** (Cloudflare Turnstile) on sign-up to block bots.
+- **Spam check (captcha)** on sign-up and forgot-password: a built-in math question drawn as a
+  distorted image (single use, expires in 10 minutes) plus a hidden honeypot field. If Cloudflare
+  Turnstile keys are configured, Turnstile is used instead. Works in production with no setup.
 - **Approvals** tab (Admin/Staff): each request shows name, email, requested role and date, with
   a role selector and **Approve** / **Disapprove** buttons. Staff can only approve Vet/Owner.
 - Approved users receive an **"account approved" email**.
@@ -203,7 +205,7 @@ One feed of everything important, newest first, with category filters, search, a
 ## 5. Main workflows (step by step)
 
 **5.1 Registration → approval**
-1. Visitor clicks Register, enters name/email/password, picks a role, solves the captcha.
+1. Visitor clicks Register, enters name/email/password, picks a role, answers the spam-check math question.
 2. Confirms email → account is **Pending**.
 3. Admin/Staff opens **Approvals**, checks the request, confirms or changes the role, clicks
    **Approve** (or **Disapprove**).
@@ -244,7 +246,7 @@ One feed of everything important, newest first, with category filters, search, a
 | Backend | **Supabase**: PostgreSQL, Supabase Auth, Row Level Security (RLS), SQL functions & triggers |
 | Database changes | Supabase CLI migrations (`supabase/migrations/*.sql`), generated TypeScript types (`src/types/supabase.ts`) |
 | Email | Nodemailer over Gmail SMTP, HTML templates in `docs/supabase/email-templates/` |
-| Bot protection | Cloudflare Turnstile (server-verified) |
+| Bot protection | Built-in signed math captcha (SVG image, HMAC-signed, single use) + honeypot; Cloudflare Turnstile when keys are set |
 | Rate limiting | Upstash Redis sliding window (5 requests / 10 s per key; skipped if not configured) |
 | PDFs / printing | Hidden-iframe printing, jsPDF + html2canvas for encounter PDFs |
 | Hosting | **Vercel** (app), **Supabase** cloud (database/auth) |
@@ -346,8 +348,11 @@ erDiagram
 4. **Server-side role guards** on every page and server action (defence in depth).
 5. **Booking integrity** — owners can only book through `book_appointment()` (capacity check
    with a row lock); direct inserts are blocked.
-6. **Bot and abuse protection** — Turnstile captcha on sign-up; rate limits on sign-in, sign-up,
-   password reset, profile updates.
+6. **Bot and abuse protection** — spam check on sign-up and password reset (built-in math captcha:
+   the answer is never sent to the browser, the challenge is HMAC-signed, expires in 10 minutes and
+   is single use via `consume_captcha_challenge()`; plus a honeypot field; Cloudflare Turnstile
+   when configured), checked before any account is created or email sent; rate limits on sign-in,
+   sign-up, password reset, profile updates.
 7. **Auditability** — status history, account/staff/schedule logs written by the database
    itself, so they cannot be skipped or forged from the browser.
 8. **Secrets** — service-role key and SMTP password only on the server (environment variables);
@@ -370,6 +375,7 @@ erDiagram
 | `create_owned_pet()` | function (RPC) | Owner adds a pet and is linked to it in one step |
 | `touch_last_seen()` | function (RPC) | Presence heartbeat for Online/Offline |
 | `clinic_member_names()` | function (RPC) | Returns only names/roles of clinic members (privacy) |
+| `consume_captcha_challenge()` | function (server only) | Marks a solved captcha challenge as used; refuses reuse |
 
 Uniqueness/validity rules: one encounter per appointment; one active schedule per date + start
 time; schedule capacity ≥ 1 and start < end; unique invoice and receipt numbers; one link per
@@ -392,6 +398,7 @@ Vercel):**
 | `17-owner-presence` | Every owner listed, Online/Offline filter, heartbeat |
 | `18-account-logs` | Profile and password changes logged and visible to Admin/Staff |
 | `19-audit-fixes` | Database refuses tampering per role; billing safety; schedule rules; vet screens |
+| `20-captcha` | Captcha image not readable as text, wrong/empty answers, honeypot, single use (replay rejected), forgot-password protected |
 
 Latest full run: **all tests passed** (see the PR for the exact count), production build passes,
 no new lint findings. **Manual guides:** `docs/revisions/bug-fixes-human-testing.md`,
@@ -409,9 +416,9 @@ see `docs/revisions/audit-report-oct-30.md`.
   that depends on it.
 - **Environment variables** (names only): `NEXT_PUBLIC_SUPABASE_URL`,
   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SMTP_USER`, `SMTP_PASSWORD`,
-  `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, `NEXT_PUBLIC_SITE_NAME`,
+  optional `NEXT_PUBLIC_TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY`, optional `CAPTCHA_SECRET`, `NEXT_PUBLIC_SITE_NAME`,
   `NEXT_PUBLIC_SITE_URL`, optional `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`; test
-  accounts `TEST_*` for Playwright only. Without Turnstile keys the captcha is skipped; without
+  accounts `TEST_*` for Playwright only. Without Turnstile keys the built-in captcha is used; without
   SMTP the emails are logged instead of sent; without Upstash rate limiting is skipped.
 - **Timezone:** clinic dates and booking rules use **Asia/Manila**.
 
@@ -459,6 +466,8 @@ see `docs/revisions/audit-report-oct-30.md`.
 - No two-factor authentication screen (Supabase MFA not enabled).
 - Supabase "leaked password protection" is a paid-plan setting, currently off.
 - Presence is approximate (1-minute heartbeat; offline after ~3 minutes).
+- The built-in math captcha stops simple bots, not OCR-capable attackers, and is an image (limited
+  for screen-reader users); adding the free Turnstile keys upgrades it with no code change.
 
 ## 16. Revision history
 
@@ -468,6 +477,7 @@ see `docs/revisions/audit-report-oct-30.md`.
 | Oct 30, 2026 — PR #8 | Client revisions: Staff role; register-as roles with captcha; approval workflow with email; role permissions; role badge; instant booking with database-enforced limit (fixed UTC bug); role-specific cancel options |
 | Oct 30, 2026 — PR #9 | Owners directory lists all owners with Online/Offline filter; account change logs; full days blocked on calendar; login redirect fix |
 | Oct 30, 2026 — audit | Security/consistency audit (21 items) fixed: booking bypass, forged history, vet schedule/billing access, staff privacy, encounter rules, safe one-step billing, schedule validation, counts, cleanup |
+| Oct 30, 2026 — captcha | Spam check always on in production: built-in math captcha + honeypot on sign-up and forgot password (Turnstile optional); login page fits phones |
 
 ## 17. Glossary
 
@@ -491,6 +501,7 @@ see `docs/revisions/audit-report-oct-30.md`.
 | `docs/revisions/bug-fixes-human-testing.md` | Manual tests for PR #9 |
 | `docs/revisions/audit-report-oct-30.md` | Audit findings and fix log |
 | `docs/revisions/audit-fixes-human-testing.md` | Manual tests for the audit fixes |
+| `docs/revisions/captcha.md` | Spam protection: how it works, rollout, manual tests |
 | `docs/handover/*` | Earlier handover notes (MVP era; this file supersedes their flow descriptions) |
 | `PROJECT_CONTEXT.md` | Original product decisions (MVP era; roles updated here) |
 | `supabase/migrations/` | Database history (source of truth for schema) |

@@ -1,8 +1,10 @@
 import { test, expect, type Page } from '@playwright/test';
 import { deleteAccounts, serviceDb, uniqueEmail } from './flows/accounts';
+import { solveSpamCheck } from './flows/captcha';
 
 // Stage 3 — registration with a requested role + captcha (#2).
-// Uses Cloudflare's always-pass Turnstile test keys from .env.local.
+// Runs with the built-in spam check (no Turnstile keys), like production. More captcha
+// cases live in tests/20-captcha.spec.ts.
 test.describe.configure({ timeout: 120000 });
 
 const createdEmails: string[] = [];
@@ -38,12 +40,12 @@ test('sign-up offers Admin, Staff, Veterinarian and Owner', async ({ page }) => 
 });
 
 test('sign-up is blocked when the captcha is not completed', async ({ page }) => {
-  await page.route('**/challenges.cloudflare.com/**', (route) => route.abort());
   await openSignUp(page);
   const email = uniqueEmail('nocaptcha');
   await fillSignUp(page, email, 'owner');
+  await expect(page.getByTestId('spam-check')).toBeVisible({ timeout: 30000 });
   await page.locator('button[type="submit"]').click();
-  await expect(page.getByText('Please complete the "I\'m not a robot" check')).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText('Answer the spam check question.')).toBeVisible({ timeout: 30000 });
 
   const { data } = await serviceDb().from('profiles').select('id').eq('email', email);
   expect(data ?? []).toHaveLength(0);
@@ -51,13 +53,10 @@ test('sign-up is blocked when the captcha is not completed', async ({ page }) =>
 
 test('a completed sign-up creates a pending account with the requested role', async ({ page }) => {
   await openSignUp(page);
-  // Turnstile renders its iframe in a closed shadow root; the response input is what we can see.
-  await expect(page.getByTestId('signup-captcha').locator('input[name="cf-turnstile-response"]')).toBeAttached({ timeout: 30000 });
-
   const email = uniqueEmail('register');
   createdEmails.push(email);
   await fillSignUp(page, email, 'veterinarian');
-  await expect(page.locator('input[name="cf-turnstile-response"]')).not.toHaveValue('', { timeout: 30000 });
+  await solveSpamCheck(page);
   await page.locator('button[type="submit"]').click();
 
   await expect(page.getByText('must approve it before you can sign in')).toBeVisible({ timeout: 30000 });

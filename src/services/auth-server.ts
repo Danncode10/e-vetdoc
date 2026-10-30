@@ -3,11 +3,16 @@
 import { createClient } from '@/utils/supabase/server';
 import { verifyRateLimit } from '@/lib/ratelimit';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
-import { verifyCaptcha } from '@/services/captcha';
+import { isTurnstileEnabled, verifyCaptcha } from '@/services/captcha';
+import { CAPTCHA_FAILED_MESSAGE, type CaptchaSubmission } from '@/lib/captcha';
 import { isUserRole } from '@/lib/roles';
 import { ACCOUNT_STATE_MESSAGES, getAccountState } from '@/lib/account-status';
 
 const MIN_PASSWORD_SCORE = 3;
+
+function captchaError() {
+  return isTurnstileEnabled() ? 'Please complete the "I\'m not a robot" check and try again.' : CAPTCHA_FAILED_MESSAGE;
+}
 
 function getPasswordScore(password: string) {
   let score = 0;
@@ -57,7 +62,7 @@ export async function signUpWithEmailRateLimited(
   origin: string,
   fullName: string | undefined,
   requestedRole: string,
-  captchaToken?: string,
+  captcha?: CaptchaSubmission,
 ) {
   const { success } = await verifyRateLimit(email, "sign-up");
   if (!success) return { error: 'Too many signup attempts. Try again in a few moments.' };
@@ -67,8 +72,8 @@ export async function signUpWithEmailRateLimited(
   if (getPasswordScore(password) < MIN_PASSWORD_SCORE) {
     return { error: 'Use a stronger password before creating your account.' };
   }
-  if (!(await verifyCaptcha(captchaToken))) {
-    return { error: 'Please complete the "I\'m not a robot" check and try again.' };
+  if (!(await verifyCaptcha(captcha))) {
+    return { error: captchaError() };
   }
 
   const supabase = await createClient();
@@ -95,9 +100,13 @@ export async function signUpWithEmailRateLimited(
   return { success: true };
 }
 
-export async function forgotPasswordRateLimited(email: string, redirectUrl: string) {
+export async function forgotPasswordRateLimited(email: string, redirectUrl: string, captcha?: CaptchaSubmission) {
   const { success } = await verifyRateLimit(email, "password-reset");
   if (!success) return { error: 'Too many password reset attempts. Try again in a few moments.' };
+  // Reset emails go to any address typed in, so they need the spam check too.
+  if (!(await verifyCaptcha(captcha))) {
+    return { error: captchaError() };
+  }
 
   // Recovery emails may be opened in a different browser from the one that
   // requested them. Avoid PKCE's browser-local verifier for this one flow.
