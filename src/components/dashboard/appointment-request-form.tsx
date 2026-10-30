@@ -24,7 +24,7 @@ import { requestAppointment } from "@/services/appointments";
 import { listPetsForCurrentUser } from "@/services/pets";
 import { listServices } from "@/services/services";
 import { getAvailableSlots, listAppointmentSchedules } from "@/services/appointments";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 // ──────────────────────────────────────────────────────────────
@@ -133,11 +133,12 @@ function StepBar({ current }: { current: number }) {
 
 interface MiniCalendarProps {
   scheduleMap: Map<string, any>; // dateStr → schedule
+  fullDates: Set<string>; // dates whose every open slot has reached its booking limit
   selectedDate: string;
   onSelect: (dateStr: string) => void;
 }
 
-function MiniCalendar({ scheduleMap, selectedDate, onSelect }: MiniCalendarProps) {
+function MiniCalendar({ scheduleMap, fullDates, selectedDate, onSelect }: MiniCalendarProps) {
   const todayObj = new Date();
   const todayStr = toYYYYMMDD(todayObj.getFullYear(), todayObj.getMonth(), todayObj.getDate());
 
@@ -207,7 +208,8 @@ function MiniCalendar({ scheduleMap, selectedDate, onSelect }: MiniCalendarProps
 
           const isPast = dateStr < todayStr;
           const schedule = scheduleMap.get(dateStr) ?? null;
-          const hasOpen = schedule && !schedule.is_closed;
+          const isFull = !isPast && fullDates.has(dateStr);
+          const hasOpen = schedule && !schedule.is_closed && !isFull;
           const isClosed = schedule && schedule.is_closed;
           const isSelected = dateStr === selectedDate;
           const isToday = dateStr === todayStr;
@@ -223,6 +225,8 @@ function MiniCalendar({ scheduleMap, selectedDate, onSelect }: MiniCalendarProps
                 relative min-h-[56px] flex flex-col items-center justify-center rounded-xl p-1 transition-all duration-150
                 ${isSelected
                   ? "bg-primary text-primary-foreground font-bold shadow-md ring-2 ring-primary ring-offset-2 scale-105 z-10"
+                  : isFull
+                  ? "bg-destructive/10 text-destructive border border-destructive/40 font-semibold cursor-not-allowed"
                   : hasOpen && !isPast
                   ? "bg-emerald-50 text-emerald-950 border-2 border-emerald-500 hover:bg-emerald-100 hover:border-emerald-600 font-bold dark:bg-emerald-950/40 dark:text-emerald-200 dark:border-emerald-500 shadow-xs cursor-pointer"
                   : isToday
@@ -235,6 +239,8 @@ function MiniCalendar({ scheduleMap, selectedDate, onSelect }: MiniCalendarProps
               title={
                 isPast
                   ? "Past date"
+                  : isFull
+                  ? "Fully booked"
                   : hasOpen
                   ? `Available: ${formatTime12(schedule.start_time)} – ${formatTime12(schedule.end_time)}`
                   : isClosed
@@ -248,16 +254,21 @@ function MiniCalendar({ scheduleMap, selectedDate, onSelect }: MiniCalendarProps
               {hasOpen && !isPast && !isSelected && (
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 mt-1" />
               )}
+              {isFull && <span className="text-[9px] font-bold uppercase leading-none mt-0.5">Full</span>}
             </button>
           );
         })}
       </div>
 
       {/* Legend */}
-      <div className="flex items-center justify-center sm:justify-start gap-5 mt-4 pt-3.5 border-t border-border">
+      <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-5 gap-y-2 mt-4 pt-3.5 border-t border-border">
         <div className="flex items-center gap-2">
           <div className="w-3.5 h-3.5 rounded-md bg-emerald-100 border-2 border-emerald-500" />
           <span className="text-xs font-semibold text-foreground">Available</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3.5 h-3.5 rounded-md bg-destructive/10 border border-destructive/40" />
+          <span className="text-xs font-semibold text-destructive">Full</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-3.5 h-3.5 rounded-md bg-muted/40 border border-border/60" />
@@ -278,6 +289,7 @@ function MiniCalendar({ scheduleMap, selectedDate, onSelect }: MiniCalendarProps
 
 export function AppointmentRequestForm() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [step, setStep] = useState(0);
   const [isPending, setIsPending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -315,7 +327,8 @@ export function AppointmentRequestForm() {
       const result = await listAppointmentSchedules();
       return result || [];
     },
-    refetchOnWindowFocus: false,
+    // Other owners book too; refresh so full days show up without reloading.
+    refetchOnWindowFocus: true,
   });
 
   // Build schedule map: dateStr → schedule
@@ -327,6 +340,17 @@ export function AppointmentRequestForm() {
       }
     }
     return map;
+  }, [schedulesQuery.data]);
+
+  // A date is full once every open slot on it has reached its booking limit.
+  const fullDates = React.useMemo(() => {
+    const openByDate = new Map<string, boolean[]>();
+    for (const s of schedulesQuery.data ?? []) {
+      if (!s.specific_date || s.is_closed) continue;
+      const date = String(s.specific_date).slice(0, 10);
+      openByDate.set(date, [...(openByDate.get(date) ?? []), s.is_full]);
+    }
+    return new Set([...openByDate].filter(([, full]) => full.every(Boolean)).map(([date]) => date));
   }, [schedulesQuery.data]);
 
   // Fetch available slots when date selected
@@ -414,6 +438,9 @@ export function AppointmentRequestForm() {
       router.refresh();
     } catch (err: any) {
       const msg = err instanceof Error ? err.message : "Failed to submit. Please try again.";
+      // Someone may have taken the last place meanwhile: show the latest availability.
+      void queryClient.invalidateQueries({ queryKey: ["appointment-schedules"] });
+      void queryClient.invalidateQueries({ queryKey: ["available-slots"] });
       setFormError(msg);
       toast.error(msg);
     } finally {
@@ -437,7 +464,7 @@ export function AppointmentRequestForm() {
         <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-1">Appointment Request</p>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Book a Visit</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Follow the steps below. The clinic will confirm your final appointment.
+          Follow the steps below. Your visit is confirmed right away while the day still has open slots.
         </p>
       </div>
 
@@ -577,6 +604,7 @@ export function AppointmentRequestForm() {
             ) : (
               <MiniCalendar
                 scheduleMap={scheduleMap}
+                fullDates={fullDates}
                 selectedDate={formData.preferredDate}
                 onSelect={(d) => {
                   set("preferredDate", d);

@@ -20,12 +20,14 @@ let owner: { id: string; email: string; password: string };
 const bookings: Array<{ petId: string; appointmentId: string }> = [];
 
 test.beforeAll(async () => {
+  test.setTimeout(120000);
   owner = await createAccount({ requestedRole: 'owner', approveAs: 'owner', fullName: 'E2E Cancel Owner' });
   bookings.push(await createBookedAppointment(owner.id, '2030-02-11'));
   bookings.push(await createBookedAppointment(owner.id, '2030-02-12'));
 });
 
 test.afterAll(async () => {
+  test.setTimeout(120000);
   for (const booking of bookings) await deleteBookedAppointment(booking);
   await deleteAccounts([owner.id]);
 });

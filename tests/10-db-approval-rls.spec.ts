@@ -10,6 +10,7 @@ let petId: string | null = null;
 let appointmentId: string | null = null;
 
 test.afterAll(async () => {
+  test.setTimeout(120000);
   const db = serviceDb();
   if (appointmentId) await db.from('appointments').delete().eq('id', appointmentId);
   if (petId) {

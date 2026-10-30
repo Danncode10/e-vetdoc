@@ -110,10 +110,11 @@ export async function listOwnerRegistry() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, full_name, email, phone, pet_owners(pet_id, relationship, is_primary_contact, can_view_medical_records, pets(id, name, species, breed)), appointments!appointments_owner_id_fkey(id, status, scheduled_start, preferred_date, preferred_time, reason, services(id, name), pets(id, name))")
+    .select("id, full_name, email, phone, last_seen_at, approval_status, pet_owners(pet_id, relationship, is_primary_contact, can_view_medical_records, pets(id, name, species, breed)), appointments!appointments_owner_id_fkey(id, status, scheduled_start, preferred_date, preferred_time, reason, services(id, name), pets(id, name))")
     .eq("role", "owner")
-    .order("full_name")
-    .limit(100);
+    // Every owner account, online or not; disapproved sign-ups are not clients.
+    .neq("approval_status", "rejected")
+    .order("full_name");
   if (error) throw error;
   return data;
 }

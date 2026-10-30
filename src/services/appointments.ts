@@ -442,7 +442,30 @@ export async function listAppointmentSchedules() {
       }, null, 2));
       throw error;
     }
-    return data;
+
+    // Attach how many places each dated schedule already has taken, so the booking
+    // calendar can show full days before the owner picks them. Same counting rule as
+    // getAvailableSlots and public.book_appointment().
+    const dates = [...new Set(data.map((s) => s.specific_date).filter((d): d is string => Boolean(d)))];
+    const { data: bookings, error: bookingsError } = dates.length
+      ? await supabase
+          .from("appointments")
+          .select("preferred_date, preferred_time")
+          .in("preferred_date", dates)
+          .not("status", "in", `(${INACTIVE_BOOKING_STATUSES.join(",")})`)
+      : { data: [], error: null };
+    if (bookingsError) throw bookingsError;
+
+    return data.map((schedule) => {
+      const startH = Number(schedule.start_time.split(":")[0]);
+      const endH = Number(schedule.end_time.split(":")[0]);
+      const bookedCount = schedule.specific_date
+        ? (bookings ?? []).filter(
+            (b) => b.preferred_date === schedule.specific_date && isInSlotHours(b.preferred_time, startH, endH),
+          ).length
+        : 0;
+      return { ...schedule, booked_count: bookedCount, is_full: bookedCount >= schedule.max_capacity };
+    });
   } catch (err) {
     console.error("EXACT_PG_ERROR_CATCH_listAppointmentSchedules:", JSON.stringify(err, null, 2));
     throw err;
