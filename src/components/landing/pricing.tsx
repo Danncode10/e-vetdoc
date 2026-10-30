@@ -40,7 +40,7 @@ const PLANS = [
     suffix: " what matters",
     description: "Give each authorized pet owner a secure, personal view of their pet’s care.",
     features: [
-      "Multiple authorized owners",
+      "Multiple pet owners",
       "A secure owner portal",
       "Linked pet profiles",
       "Care information by permission",

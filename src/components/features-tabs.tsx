@@ -48,7 +48,7 @@ const FEATURES = [
     icon: UsersRound,
     title: "Made for every pet family",
     description:
-      "Authorized owners can each have a secure view of the pets they care for.",
+      "Pet owners can each have a secure view of the pets they care for.",
     span: "lg:col-span-2",
     glow: "radial-gradient(circle at 80% 20%, color-mix(in srgb, var(--color-primary) 14%, transparent), transparent 50%)",
   },
