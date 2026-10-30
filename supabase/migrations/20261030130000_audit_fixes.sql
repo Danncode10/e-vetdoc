@@ -33,6 +33,7 @@ DROP POLICY IF EXISTS "Allow public read access on services" ON "public"."servic
 -- ---------------------------------------------------------------------------
 DROP POLICY IF EXISTS "anyone can view veterinarians" ON "public"."profiles";
 
+DROP POLICY IF EXISTS "clinic members view clinic profiles" ON "public"."profiles";
 CREATE POLICY "clinic members view clinic profiles" ON "public"."profiles"
     FOR SELECT TO "authenticated"
     USING ((("role" = ANY (ARRAY['admin'::"public"."user_role", 'staff'::"public"."user_role", 'veterinarian'::"public"."user_role"]))

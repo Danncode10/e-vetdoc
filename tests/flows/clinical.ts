@@ -73,6 +73,7 @@ export async function runAdminAuditVerification(page: Page) {
   
   await expect(page).toHaveURL(/.*login/, { timeout: 15000 });
   await expect(page.locator('text=Welcome back')).toBeVisible({ timeout: 10000 });
+  await page.waitForLoadState('networkidle');
   
   const actualAdminEmail = process.env.TEST_ADMIN_EMAIL || 'adminTest@gmail.com';
   const actualAdminPassword = process.env.TEST_ADMIN_PASSWORD!;

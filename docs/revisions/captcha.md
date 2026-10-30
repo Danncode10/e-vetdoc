@@ -1,5 +1,14 @@
 # Spam protection (captcha) — Oct 30, 2026
 
+> **Production incident (Oct 30, 12:30 PM):** after PR #11 was merged, every captcha answer was
+> rejected on the live site, so nobody could register. Cause: the database migrations of PRs #9,
+> #10 and #11 were never applied to the production database, so the single-use function
+> `consume_captcha_challenge()` did not exist; and the PR was merged one commit before the
+> safe-rollout fix. **Fix:** the hotfix PR (captcha keeps working without that function, with a
+> loud log reminder) **and** run `docs/revisions/production-catch-up-oct-30.sql` once in Vinz's
+> Supabase SQL Editor (or `supabase db push`). Reproduced and verified on the test database by
+> temporarily removing the function.
+
 ## Why
 The sign-up form had Cloudflare Turnstile, but it only switches on when two keys are set in
 Vercel. They were never set, so **production had no captcha**: bots could create pending accounts
@@ -42,7 +51,9 @@ instead of the math question (the honeypot stays).
   solve it. Production builds never send it (checked against a production build).
 
 ## Rollout
-1. `supabase db push` on the production project (adds the single-use table/function).
+1. `supabase db push` on the production project (adds the single-use table/function). If the code
+   is deployed first, the captcha still works (signed answer + expiry) but answers are not
+   single-use yet, and the server logs `CAPTCHA: run supabase db push` until the migration runs.
 2. Merge the PR → Vercel deploys. Nothing to configure. (Optional: set `CAPTCHA_SECRET`.)
 3. Check: open the live site → **Create Account** → the math question is shown.
 
@@ -52,6 +63,11 @@ instead of the math question (the honeypot stays).
   created and a new question shown; honeypot rejected; correct answer creates the pending
   account; **replaying the same solved challenge with another email is rejected**; forgot
   password requires the check too.
+- `tests/21-captcha-abuse.spec.ts` (5 tests): an **expired** challenge is rejected even with the
+  right answer; a **tampered** token (longer expiry) is rejected; a **spam burst** of 5
+  simultaneous sign-ups with one solved challenge creates exactly one account; honeypot rejected
+  even with a valid challenge; plus a control test proving a valid challenge passes. The helper
+  signs challenges like the server so tests can create expired ones.
 - `tests/12-registration.spec.ts` updated to use the built-in captcha.
 
 ## Manual test (5 minutes)
