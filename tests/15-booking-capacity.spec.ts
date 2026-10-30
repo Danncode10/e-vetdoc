@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { createAccount, deleteAccounts, loginAndOpenDashboard, serviceDb, userDb } from './flows/accounts';
 
 // Stage 6 — automatic approval + booking limit (#6).
@@ -132,7 +132,7 @@ test(`simultaneous bookings never exceed the limit of ${CAPACITY}`, async () => 
   expect(count).toBe(CAPACITY);
 });
 
-test('a full slot shows as fully booked in the booking form', async ({ page }) => {
+async function openBookingCalendar(page: Page) {
   const owner = owners[3];
   await loginAndOpenDashboard(page, owner.email, owner.password).catch(async () => {
     // New owners finish their profile on /onboarding first; createAccount already filled it.
@@ -143,26 +143,34 @@ test('a full slot shows as fully booked in the booking form', async ({ page }) =
   await page.getByText('General Consultation').first().click();
   await page.locator('#step-0-next-btn').click();
 
-  const [year, month, day] = bookingDate.split('-').map(Number);
+  const [year, month] = bookingDate.split('-').map(Number);
   const monthLabel = new Date(Date.UTC(year, month - 1, 1)).toLocaleString('en-US', { month: 'long', timeZone: 'UTC' });
   for (let i = 0; i < 6; i++) {
     if (await page.getByText(`${monthLabel} ${year}`, { exact: true }).isVisible()) break;
     await page.getByRole('button', { name: 'Next month' }).click();
   }
-  await page
-    .locator('button[title*="Available:"]')
-    .filter({ has: page.locator('span', { hasText: new RegExp(`^${day}$`) }) })
-    .click();
-  await page.locator('#step-1-next-btn').click();
+}
 
-  const slot = page.getByRole('button', { name: /9:00 AM - 12:00 PM/ });
-  await expect(slot).toBeVisible({ timeout: 30000 });
-  await expect(slot).toBeDisabled();
-  await expect(slot).toContainText(`${CAPACITY}/${CAPACITY} booked`);
-  await expect(slot).toContainText('Full');
+function dayCell(page: Page) {
+  const day = Number(bookingDate.split('-')[2]);
+  return page.locator('button[title]').filter({ has: page.locator('span', { hasText: new RegExp(`^${day}$`) }) });
+}
+
+test('a full day is marked Full on the calendar and cannot be picked', async ({ page }) => {
+  await openBookingCalendar(page);
+  const cell = dayCell(page);
+  await expect(cell).toHaveAttribute('title', 'Fully booked', { timeout: 30000 });
+  await expect(cell).toBeDisabled();
+  await expect(cell).toContainText('Full');
+  await expect(page.locator('#step-1-next-btn')).toBeVisible();
 });
 
-test('cancelling a booking frees its place', async () => {
+test('a 4th owner is rejected by the server even if the page was stale', async () => {
+  const { error } = await book(owners[3]);
+  expect(error?.message).toContain('This schedule is fully booked. Please choose another date or time.');
+});
+
+test('cancelling a booking frees its place and the 4th owner can book through the form', async ({ page }) => {
   const db = serviceDb();
   const { data: appt } = await db
     .from('appointments')
@@ -173,7 +181,25 @@ test('cancelling a booking frees its place', async () => {
     .single();
   await db.from('appointments').update({ status: 'cancelled' }).eq('id', appt!.id);
 
-  const { data, error } = await book(owners[3]);
-  expect(error).toBeNull();
-  expect(data?.status).toBe('booked');
+  await openBookingCalendar(page);
+  const cell = dayCell(page);
+  await expect(cell).toHaveAttribute('title', /^Available:/, { timeout: 30000 });
+  await cell.click();
+  await page.locator('#step-1-next-btn').click();
+
+  const slot = page.getByRole('button', { name: /9:00 AM - 12:00 PM/ });
+  await expect(slot).toBeEnabled({ timeout: 30000 });
+  await expect(slot).toContainText(`${CAPACITY - 1}/${CAPACITY} booked`);
+  await slot.click();
+  await page.locator('#step-2-next-btn').click();
+  await page.locator('#appt-reason').fill('Capacity test');
+  await page.locator('#submit-appt-btn').click();
+  await expect(page.getByText('Appointment booked!')).toBeVisible({ timeout: 30000 });
+
+  const { count } = await db
+    .from('appointments')
+    .select('id', { count: 'exact', head: true })
+    .eq('preferred_date', bookingDate)
+    .not('status', 'in', '(cancelled,no_show)');
+  expect(count).toBe(CAPACITY);
 });
