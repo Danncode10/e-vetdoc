@@ -17,6 +17,17 @@ export type AppointmentInsert = TablesInsert<"appointments">;
 export type AppointmentUpdate = TablesUpdate<"appointments">;
 export type AppointmentStatusHistory = Tables<"appointment_status_history">;
 
+/**
+ * Cancels bookings whose date passed before the clinic acted on them (database function
+ * `cancel_overdue_appointments`). Runs before appointments are read so every screen shows
+ * the current state. A failure (e.g. the migration is not applied yet) never blocks reads.
+ */
+export async function sweepOverdueAppointments() {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("cancel_overdue_appointments");
+  if (error) console.error("cancel_overdue_appointments failed:", error.message);
+}
+
 export async function listAppointments(filters?: {
   status?: Appointment["status"];
   petId?: string;
@@ -27,6 +38,7 @@ export async function listAppointments(filters?: {
   limit?: number;
   offset?: number;
 }) {
+  await sweepOverdueAppointments();
   const supabase = await createClient();
   let query = supabase
     .from("appointments")
@@ -72,6 +84,7 @@ export async function listAppointments(filters?: {
 }
 
 export async function getAppointmentById(id: string) {
+  await sweepOverdueAppointments();
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("appointments")
@@ -142,6 +155,7 @@ export async function cancelAppointment(id: string, reason?: string) {
 }
 
 export async function listOwnerAppointments(ownerId: string) {
+  await sweepOverdueAppointments();
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("appointments")

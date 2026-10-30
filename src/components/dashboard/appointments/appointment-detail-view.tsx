@@ -28,6 +28,7 @@ import { toast } from "sonner";
 import { cancelAppointment } from "@/services/appointments";
 import { CancelModal } from "@/components/dashboard/appointments/cancel-modal";
 import { cancelAudienceFor } from "@/lib/cancellation-reasons";
+import { AutoCancelledBadge, AutoCancelledNotice } from "@/components/dashboard/appointments/auto-cancelled";
 import { QuickBillingDialog } from "@/components/dashboard/billing/quick-billing-dialog";
 import { useRouter } from "next/navigation";
 function fmtDate(iso: string) {
@@ -256,8 +257,13 @@ export function AppointmentDetailView({
             {service?.name || "Veterinary Visit"}
           </h1>
         </div>
-        <StatusBadge status={appointment.status} />
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge status={appointment.status} />
+          {appointment.auto_cancelled && <AutoCancelledBadge />}
+        </div>
       </div>
+
+      {appointment.auto_cancelled && <AutoCancelledNotice className="text-sm" />}
 
       {/* ── Section 1: User (Owner) & Appointment Quick Overview ── */}
       <div className="grid gap-4 md:grid-cols-2">
@@ -525,7 +531,10 @@ export function AppointmentDetailView({
                             </span>
                           )}
                         </div>
-                        <StatusBadge status={app.status} />
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <StatusBadge status={app.status} />
+                          {app.auto_cancelled && <AutoCancelledBadge />}
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-3 text-xs text-muted-foreground mb-3">
@@ -563,7 +572,9 @@ export function AppointmentDetailView({
                         {app.requested_at && <span>Requested: {fmtDateTime(app.requested_at)}</span>}
                         {app.confirmed_at && <span>• Confirmed: {fmtDateTime(app.confirmed_at)}</span>}
                         {app.completed_at && <span>• Completed: {fmtDateTime(app.completed_at)}</span>}
-                        {app.cancelled_at && <span>• Cancelled: {fmtDateTime(app.cancelled_at)}</span>}
+                        {app.cancelled_at && (
+                          <span>• {app.auto_cancelled ? "Auto-cancelled by system" : "Cancelled"}: {fmtDateTime(app.cancelled_at)}</span>
+                        )}
                       </div>
 
                       {!isCurrent && (

@@ -2,6 +2,7 @@
 
 import { createClient } from '@/utils/supabase/server';
 import { requireAuth } from '@/services/authorization';
+import { sweepOverdueAppointments } from '@/services/appointments';
 
 /** Today's date in the clinic's timezone (Philippines), as YYYY-MM-DD. */
 function clinicToday() {
@@ -51,6 +52,7 @@ export interface OwnerDashboardSummary {
  */
 export async function getOwnerDashboardSummary(): Promise<OwnerDashboardSummary> {
   const { profile } = await requireAuth();
+  await sweepOverdueAppointments();
   const supabase = await createClient();
 
   // 1. Fetch owner's linked pets
@@ -164,6 +166,7 @@ export interface AdminDashboardSummary {
  */
 export async function getAdminDashboardSummary(): Promise<AdminDashboardSummary> {
   const { profile } = await requireAuth();
+  await sweepOverdueAppointments();
   const supabase = await createClient();
 
   const [petsRes, ownersRes, apptsRes, unpaidRes, recentApptsRes] = await Promise.all([

@@ -119,10 +119,12 @@ export async function getClinicActivityLogs(
 
   if (statusHistory) {
     for (const entry of statusHistory) {
-      const actorName =
-        (entry.changed_by_profile as any)?.full_name ||
-        (entry.changed_by_profile as any)?.email ||
-        "System / Staff";
+      const isAutoCancel = entry.reason === "auto_cancelled";
+      const actorName = isAutoCancel
+        ? "System"
+        : (entry.changed_by_profile as any)?.full_name ||
+          (entry.changed_by_profile as any)?.email ||
+          "System / Staff";
       const petName = (entry.appointment as any)?.patient?.name || "Patient";
       const serviceName = (entry.appointment as any)?.service?.name || "Appointment";
       const toStatus = entry.new_status?.toUpperCase() || "UPDATED";
@@ -131,12 +133,14 @@ export async function getClinicActivityLogs(
       logs.push({
         id: `status-${entry.id}`,
         category: "appointment",
-        action: `Appointment ${toStatus}`,
-        description: `${actorName} transitioned ${petName}'s ${serviceName} appointment ${fromStatus}to ${toStatus}.`,
+        action: isAutoCancel ? "Appointment AUTO-CANCELLED" : `Appointment ${toStatus}`,
+        description: isAutoCancel
+          ? `System automatically cancelled ${petName}'s ${serviceName} appointment: the date passed before the clinic accepted it.`
+          : `${actorName} transitioned ${petName}'s ${serviceName} appointment ${fromStatus}to ${toStatus}.`,
         actor: {
           id: entry.changed_by_id,
           name: actorName,
-          role: (entry.changed_by_profile as any)?.role ?? "staff",
+          role: isAutoCancel ? "system" : (entry.changed_by_profile as any)?.role ?? "staff",
           email: (entry.changed_by_profile as any)?.email ?? null,
         },
         target: {

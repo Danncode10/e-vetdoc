@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.17"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       appointment_schedules: {
@@ -141,6 +116,7 @@ export type Database = {
       appointments: {
         Row: {
           assigned_veterinarian_id: string | null
+          auto_cancelled: boolean
           cancellation_reason:
             | Database["public"]["Enums"]["cancellation_reason"]
             | null
@@ -167,6 +143,7 @@ export type Database = {
         }
         Insert: {
           assigned_veterinarian_id?: string | null
+          auto_cancelled?: boolean
           cancellation_reason?:
             | Database["public"]["Enums"]["cancellation_reason"]
             | null
@@ -193,6 +170,7 @@ export type Database = {
         }
         Update: {
           assigned_veterinarian_id?: string | null
+          auto_cancelled?: boolean
           cancellation_reason?:
             | Database["public"]["Enums"]["cancellation_reason"]
             | null
@@ -1020,6 +998,7 @@ export type Database = {
         }
         Returns: {
           assigned_veterinarian_id: string | null
+          auto_cancelled: boolean
           cancellation_reason:
             | Database["public"]["Enums"]["cancellation_reason"]
             | null
@@ -1051,6 +1030,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      cancel_overdue_appointments: { Args: never; Returns: number }
       clinic_member_names: {
         Args: { p_ids: string[] }
         Returns: {
@@ -1271,9 +1251,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       appointment_mode: ["in_person", "virtual"],
