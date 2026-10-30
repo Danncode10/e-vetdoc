@@ -271,7 +271,8 @@ export function AppointmentDetailView({
               onClick={async () => {
                 setIsApproving(true);
                 try {
-                  await approveAppointment(appointment.id);
+                  const approveAppointmentResult = await approveAppointment(appointment.id);
+                  if (approveAppointmentResult.error) throw new Error(approveAppointmentResult.error);
                   toast.success("Appointment approved");
                   router.refresh();
                 } catch (e) {
@@ -503,7 +504,8 @@ export function AppointmentDetailView({
             onClose={() => setShowCancelModal(false)}
             onConfirm={async (reason) => {
               try {
-                await cancelAppointment(appointment.id, reason);
+                const cancelAppointmentResult = await cancelAppointment(appointment.id, reason);
+                if (cancelAppointmentResult.error) throw new Error(cancelAppointmentResult.error);
                 toast.success("Appointment cancelled successfully");
                 setShowCancelModal(false);
                 router.refresh();

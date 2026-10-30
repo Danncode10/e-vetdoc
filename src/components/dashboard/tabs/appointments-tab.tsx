@@ -98,7 +98,8 @@ export function AppointmentsTab({ role, userId }: { role: UserRole; userId: stri
 
   async function handleCancelConfirm(reason: string) {
     if (!cancelTarget) return;
-    await cancelAppointment(cancelTarget.id, reason);
+    const cancelAppointmentResult = await cancelAppointment(cancelTarget.id, reason);
+    if (cancelAppointmentResult.error) throw new Error(cancelAppointmentResult.error);
     toast.success("Appointment cancelled", {
       description: role === "owner"
         ? `Your ${cancelTarget.services?.name || "appointment"} has been cancelled.`
@@ -111,7 +112,8 @@ export function AppointmentsTab({ role, userId }: { role: UserRole; userId: stri
   async function handleApprove(app: any) {
     setApprovingId(app.id);
     try {
-      await approveAppointment(app.id);
+      const approveAppointmentResult = await approveAppointment(app.id);
+      if (approveAppointmentResult.error) throw new Error(approveAppointmentResult.error);
       toast.success("Appointment approved", {
         description: `${app.pets?.name || "The patient"}'s ${app.services?.name || "appointment"} is confirmed.`,
       });

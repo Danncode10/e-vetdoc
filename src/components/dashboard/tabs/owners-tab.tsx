@@ -430,7 +430,8 @@ export function OwnersTab({ role }: { role: UserRole }) {
           if (!deleteTarget) return;
           setIsDeleting(true);
           try {
-            await deleteOwnerCompletely(deleteTarget.id);
+            const deleteOwnerCompletelyResult = await deleteOwnerCompletely(deleteTarget.id);
+            if (deleteOwnerCompletelyResult.error) throw new Error(deleteOwnerCompletelyResult.error);
             toast.success("Owner deleted", { description: `${deleteTarget.email ?? "The account"} and all of its data were removed.` });
             setOwners((current) => current.filter((o) => o.id !== deleteTarget.id));
             setDeleteTarget(null);

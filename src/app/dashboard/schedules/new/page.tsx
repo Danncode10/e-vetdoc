@@ -93,6 +93,10 @@ export default function AddSchedulePage() {
       toast.error("Please fill in all required fields");
       return;
     }
+    if (formatTime(startTime) >= formatTime(endTime)) {
+      toast.error("The end time must be later than the start time.");
+      return;
+    }
     if (maxCapacity <= 0) {
       toast.error("Max capacity must be greater than 0");
       return;
@@ -129,7 +133,7 @@ export default function AddSchedulePage() {
         return;
       }
       if (isEditMode && editId) {
-        await updateAppointmentSchedule(editId, {
+        const updateAppointmentScheduleResult = await updateAppointmentSchedule(editId, {
           specific_date: specificDate,
           start_time: formatTime(startTime),
           end_time: formatTime(endTime),
@@ -137,9 +141,10 @@ export default function AddSchedulePage() {
           day_of_week: dayOfWeek,
           is_closed: isClosed,
         });
+        if (updateAppointmentScheduleResult.error) throw new Error(updateAppointmentScheduleResult.error);
         toast.success("Schedule updated successfully");
       } else {
-        await createAppointmentSchedule({
+        const createAppointmentScheduleResult = await createAppointmentSchedule({
           specific_date: specificDate,
           start_time: formatTime(startTime),
           end_time: formatTime(endTime),
@@ -147,6 +152,7 @@ export default function AddSchedulePage() {
           day_of_week: dayOfWeek,
           is_closed: isClosed,
         });
+        if (createAppointmentScheduleResult.error) throw new Error(createAppointmentScheduleResult.error);
         toast.success("Schedule created successfully");
       }
       router.push("/dashboard?tab=schedules");
@@ -245,6 +251,11 @@ export default function AddSchedulePage() {
                 />
               </div>
             </div>
+            {form.startTime && form.endTime && formatTime(form.startTime) >= formatTime(form.endTime) && (
+              <p data-testid="schedule-time-error" role="alert" className="-mt-2 text-sm text-destructive">
+                The end time must be later than the start time.
+              </p>
+            )}
 
             {/* Max Capacity */}
             <div>

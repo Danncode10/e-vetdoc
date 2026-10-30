@@ -34,7 +34,7 @@ test('admin deletes an owner with pets, visits and billing; everything is gone',
   const db = serviceDb();
   const owner = await createAccount({ requestedRole: 'owner', approveAs: 'owner', fullName: 'E2E Delete From Owners Tab' });
   const { petId, appointmentId } = await createBookedAppointment(owner.id, '2030-02-02');
-  const { data: invoice } = await db.from('invoices').insert({ owner_id: owner.id, status: 'unpaid', total_amount: 100 }).select('id').single();
+  const { data: invoice } = await db.from('invoices').insert({ owner_id: owner.id, status: 'unpaid', total_amount: 100 } as never).select('id').single();
   await db.from('invoice_items').insert({ invoice_id: invoice!.id, description: 'Consult', quantity: 1, unit_price: 100 });
 
   await loginAndOpenDashboard(page, accounts.admin.email, accounts.admin.password);
