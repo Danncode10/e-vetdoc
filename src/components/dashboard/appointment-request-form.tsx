@@ -255,7 +255,7 @@ function MiniCalendar({ scheduleMap, fullDates, endedDates, bookedDates, selecte
                 isPast
                   ? "Past date"
                   : isMine
-                  ? "You already have an appointment on this day"
+                  ? "This pet already has an appointment on this day"
                   : isEnded
                   ? "Booking hours for today have ended"
                   : isFull
@@ -295,7 +295,7 @@ function MiniCalendar({ scheduleMap, fullDates, endedDates, bookedDates, selecte
         </div>
         <div className="flex items-center gap-2">
           <div className="w-3.5 h-3.5 rounded-md bg-primary/10 border-2 border-primary/40" />
-          <span className="text-xs font-semibold text-primary">Your booking</span>
+          <span className="text-xs font-semibold text-primary">Pet already booked</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-3.5 h-3.5 rounded-md bg-muted/40 border border-border/60" />
@@ -369,13 +369,16 @@ export function AppointmentRequestForm() {
     return map;
   }, [schedulesQuery.data]);
 
-  // Owners can book one appointment per day, so days they already booked are blocked.
+  // Each pet can be booked once per day, so days this pet is already booked are blocked.
   const bookedDatesQuery = useQuery({
     queryKey: ["my-booked-dates"],
     queryFn: () => listMyBookedDates(),
     refetchOnWindowFocus: true,
   });
-  const bookedDates = React.useMemo(() => new Set(bookedDatesQuery.data ?? []), [bookedDatesQuery.data]);
+  const bookedDates = React.useMemo(
+    () => new Set((bookedDatesQuery.data ?? []).filter((b) => b.petId === formData.petId).map((b) => b.date)),
+    [bookedDatesQuery.data, formData.petId],
+  );
 
   // Same-day booking stays open until today's last slot ends.
   const endedDates = React.useMemo(() => {
@@ -641,7 +644,7 @@ export function AppointmentRequestForm() {
               <div>
                 <h2 className="text-base font-semibold text-foreground">Pick a date</h2>
                 <p className="text-xs text-muted-foreground">
-                  Green dates have open slots, including today until its last slot ends. You can book one appointment per day.
+                  Green dates have open slots, including today until its last slot ends. Each pet can be booked once per day.
                 </p>
               </div>
             </div>

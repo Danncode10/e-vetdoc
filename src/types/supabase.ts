@@ -985,6 +985,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_delete_owner: { Args: { p_owner_id: string }; Returns: string }
       approve_appointment: {
         Args: { p_appointment_id: string }
         Returns: {

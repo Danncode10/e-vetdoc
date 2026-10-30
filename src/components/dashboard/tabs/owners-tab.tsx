@@ -15,10 +15,13 @@ import {
   Stethoscope,
   ChevronLeft,
   ChevronRight,
+  Trash2,
 } from "lucide-react";
+import { toast } from "sonner";
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { listOwnerRegistry } from "@/services/pets";
+import { deleteOwnerCompletely, listOwnerRegistry } from "@/services/pets";
 import type { UserRole } from "@/lib/dashboard-features";
 import { isOnline, lastSeenLabel, PRESENCE_HEARTBEAT_MS } from "@/lib/presence";
 
@@ -65,6 +68,8 @@ export function OwnersTab({ role }: { role: UserRole }) {
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [currentPage, setCurrentPage] = React.useState(1);
+  const [deleteTarget, setDeleteTarget] = React.useState<any | null>(null);
+  const [isDeleting, setIsDeleting] = React.useState(false);
   const PAGE_SIZE = 6;
   const isClinicRole = role === "admin" || role === "staff" || role === "veterinarian";
 
@@ -332,7 +337,7 @@ export function OwnersTab({ role }: { role: UserRole }) {
                   </div>
 
                   {/* Footer Link */}
-                  <div className="border-t border-border px-5 py-3 bg-muted/20">
+                  <div className="border-t border-border px-5 py-3 bg-muted/20 flex flex-col gap-2">
                     <Button
                       type="button"
                       variant="outline"
@@ -342,6 +347,18 @@ export function OwnersTab({ role }: { role: UserRole }) {
                       <ExternalLink className="w-3.5 h-3.5" />
                       Open Owner Profile & Appointment Records
                     </Button>
+                    {role === "admin" && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        data-testid="delete-owner"
+                        className="w-full gap-2 text-xs h-9 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => setDeleteTarget(owner)}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Delete owner & all data
+                      </Button>
+                    )}
                   </div>
                 </div>
               );
@@ -400,6 +417,30 @@ export function OwnersTab({ role }: { role: UserRole }) {
           )}
         </>
       )}
+      <ConfirmationDialog
+        open={Boolean(deleteTarget)}
+        title={`Permanently delete ${deleteTarget?.full_name || deleteTarget?.email || "this owner"}?`}
+        description="This deletes the owner's login, profile, pets they alone own, appointments, medical records, invoices and payments. Pets shared with another owner are kept. This cannot be undone."
+        confirmLabel="Delete owner permanently"
+        isPending={isDeleting}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) setDeleteTarget(null);
+        }}
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          setIsDeleting(true);
+          try {
+            await deleteOwnerCompletely(deleteTarget.id);
+            toast.success("Owner deleted", { description: `${deleteTarget.email ?? "The account"} and all of its data were removed.` });
+            setOwners((current) => current.filter((o) => o.id !== deleteTarget.id));
+            setDeleteTarget(null);
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : "Could not delete this owner.");
+          } finally {
+            setIsDeleting(false);
+          }
+        }}
+      />
     </div>
   );
 }

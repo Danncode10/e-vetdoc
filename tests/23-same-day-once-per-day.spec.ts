@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { createAccount, deleteAccounts, loginAndOpenDashboard, serviceDb, userDb } from './flows/accounts';
 
-// Owners can book for today (until the slot ends) and only one appointment per day.
+// Owners can book for today (until the slot ends); each PET can be booked once per day.
 test.describe.configure({ mode: 'serial', timeout: 180000 });
 test.use({ timezoneId: 'Asia/Manila' });
 
@@ -127,10 +127,14 @@ test('an owner can book an appointment for today', async () => {
   expect(data?.preferred_date).toBe(today);
 });
 
-test('the same owner cannot book a second appointment that day, even for another pet', async () => {
+test('the same pet cannot be booked twice that day, but the owner\'s other pet can', async () => {
   test.skip(!canBookToday, 'Needs a Manila time between 01:00 and 22:59.');
-  const { error } = await book(ownerA, ownerA.pets[1], today, openHour);
-  expect(error?.message).toContain('You already have an appointment on this day. You can book only one appointment per day.');
+  const samePet = await book(ownerA, ownerA.pets[0], today, openHour);
+  expect(samePet.error?.message).toContain('This pet already has an appointment on this day. Each pet can be booked once per day.');
+
+  const otherPet = await book(ownerA, ownerA.pets[1], today, openHour);
+  expect(otherPet.error).toBeNull();
+  expect(otherPet.data?.status).toBe('requested');
 });
 
 test('a slot that already ended today cannot be booked', async () => {
@@ -139,16 +143,16 @@ test('a slot that already ended today cannot be booked', async () => {
   expect(error?.message).toContain('That time slot has already ended today.');
 });
 
-test('simultaneous requests from one owner for the same day create exactly one booking', async () => {
-  const results = await Promise.all(ownerB.pets.map((petId, i) => book(ownerB, petId, futureDate, 9 + i)));
+test('simultaneous requests for the same pet and day create exactly one booking', async () => {
+  const results = await Promise.all([9, 10, 11].map((hour) => book(ownerB, ownerB.pets[0], futureDate, hour)));
   expect(results.filter((r) => !r.error)).toHaveLength(1);
   for (const r of results.filter((r) => r.error)) {
-    expect(r.error?.message).toContain('You already have an appointment on this day.');
+    expect(r.error?.message).toContain('This pet already has an appointment on this day.');
   }
   const { count } = await serviceDb()
     .from('appointments')
     .select('id', { count: 'exact', head: true })
-    .eq('owner_id', ownerB.id)
+    .eq('pet_id', ownerB.pets[0])
     .eq('preferred_date', futureDate)
     .not('status', 'in', '(cancelled,no_show)');
   expect(count).toBe(1);
@@ -156,12 +160,12 @@ test('simultaneous requests from one owner for the same day create exactly one b
 
 test('another day is still fine, and cancelling frees the day again', async () => {
   const db = serviceDb();
-  // A different day is allowed for an owner who already booked today.
-  const otherDay = await book(ownerA, ownerA.pets[1], futureDate, 10);
+  // A different day is allowed for a pet already booked today.
+  const otherDay = await book(ownerA, ownerA.pets[0], futureDate, 10);
   expect(otherDay.error).toBeNull();
 
   // Cancel Owner B's booking on the future date: they can book that day again.
-  await db.from('appointments').update({ status: 'cancelled' }).eq('owner_id', ownerB.id).eq('preferred_date', futureDate);
+  await db.from('appointments').update({ status: 'cancelled' }).eq('pet_id', ownerB.pets[0]).eq('preferred_date', futureDate);
   const again = await book(ownerB, ownerB.pets[0], futureDate, 11);
   expect(again.error).toBeNull();
 });
@@ -197,7 +201,7 @@ test('booking form: today is bookable, ended slots are marked, and a booked day 
 
   // Back in the form, today is now blocked as the owner's booked day.
   const bookedCell = await openCalendar(page, { signIn: false });
-  await expect(bookedCell).toHaveAttribute('title', 'You already have an appointment on this day', { timeout: 30000 });
+  await expect(bookedCell).toHaveAttribute('title', 'This pet already has an appointment on this day', { timeout: 30000 });
   await expect(bookedCell).toBeDisabled();
   await expect(bookedCell).toContainText('Booked');
 });

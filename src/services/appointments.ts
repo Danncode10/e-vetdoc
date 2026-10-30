@@ -137,20 +137,23 @@ function hasSlotEnded(date: string | null, endTime: string, now = clinicNow()) {
 }
 
 /**
- * Dates on which the signed-in owner already holds an appointment (not cancelled / no-show).
- * Owners can book only one appointment per day, so the booking calendar blocks these dates.
+ * Upcoming dates on which each of the signed-in owner's pets already has an appointment
+ * (not cancelled / no-show). A pet can be booked once per day, so the booking calendar blocks
+ * these dates for that pet; the owner's other pets can still be booked.
  */
-export async function listMyBookedDates(): Promise<string[]> {
+export async function listMyBookedDates(): Promise<Array<{ petId: string; date: string }>> {
   const { user } = await requireAuth();
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("appointments")
-    .select("preferred_date")
+    .select("pet_id, preferred_date")
     .eq("owner_id", user.id)
     .gte("preferred_date", clinicNow().date)
     .not("status", "in", `(${INACTIVE_BOOKING_STATUSES.join(",")})`);
   if (error) throw error;
-  return [...new Set(data.map((row) => row.preferred_date).filter((d): d is string => Boolean(d)))];
+  return data
+    .filter((row): row is { pet_id: string; preferred_date: string } => Boolean(row.preferred_date))
+    .map((row) => ({ petId: row.pet_id, date: row.preferred_date }));
 }
 
 /** Whether a booking's clinic-local time (e.g. "09:00:00") falls in [startHour, endHour). */
