@@ -834,3 +834,20 @@ export async function deleteAppointmentSchedule(id: string) {
 export async function createAppointmentSchedulesBulk(input: Parameters<typeof createAppointmentSchedulesBulkOrThrow>[0]) {
   return asActionResult(() => createAppointmentSchedulesBulkOrThrow(input));
 }
+
+/**
+ * Admin / Staff: delete several schedules at once. Each one goes through the single delete
+ * (its bookings are cancelled and the change is logged). Returns how many were deleted.
+ */
+async function deleteAppointmentSchedulesBulkOrThrow(ids: string[]) {
+  await requireScheduleManager();
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) throw new Error("Select at least one schedule.");
+  if (unique.length > 200) throw new Error("Select at most 200 schedules at a time.");
+  for (const id of unique) await deleteAppointmentScheduleOrThrow(id);
+  return { deleted: unique.length };
+}
+
+export async function deleteAppointmentSchedulesBulk(ids: string[]) {
+  return asActionResult(() => deleteAppointmentSchedulesBulkOrThrow(ids));
+}

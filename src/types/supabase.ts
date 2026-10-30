@@ -740,6 +740,8 @@ export type Database = {
           approved_at: string | null
           approved_by: string | null
           created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
           email: string | null
           emergency_contact_name: string | null
           emergency_contact_phone: string | null
@@ -757,6 +759,8 @@ export type Database = {
           approved_at?: string | null
           approved_by?: string | null
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           email?: string | null
           emergency_contact_name?: string | null
           emergency_contact_phone?: string | null
@@ -774,6 +778,8 @@ export type Database = {
           approved_at?: string | null
           approved_by?: string | null
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           email?: string | null
           emergency_contact_name?: string | null
           emergency_contact_phone?: string | null
@@ -789,6 +795,13 @@ export type Database = {
           {
             foreignKeyName: "profiles_approved_by_fkey"
             columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_deleted_by_fkey"
+            columns: ["deleted_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1124,7 +1137,9 @@ export type Database = {
           receipt_number: string
         }[]
       }
+      restore_owner: { Args: { p_owner_id: string }; Returns: string }
       touch_last_seen: { Args: never; Returns: undefined }
+      trash_owner: { Args: { p_owner_id: string }; Returns: string }
     }
     Enums: {
       appointment_mode: "in_person" | "virtual"

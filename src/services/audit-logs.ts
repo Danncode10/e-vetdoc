@@ -53,6 +53,10 @@ function describeStaffLog(action: string, actorName: string, targetName: string,
         .map((field) => PROFILE_FIELD_LABELS[field] ?? field.replace(/_/g, " "));
       return `${actorName} updated ${subject} ${fields.length ? fields.join(", ") : "profile"}.`;
     }
+    case "owner_trashed":
+      return `${actorName} moved owner ${targetName} to Trash.`;
+    case "owner_restored":
+      return `${actorName} restored owner ${targetName} from Trash.`;
     case "password_changed":
       return `${actorName} changed ${subject} password.`;
     case "email_changed":

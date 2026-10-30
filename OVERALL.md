@@ -123,7 +123,8 @@ top bar on phones).
 - Forgot/reset password by email. Sign-in attempts are rate-limited.
 
 ### 4.2 Team management (Admin)
-- Add clinic members (Admin, Staff, Vet), change roles, activate/deactivate accounts.
+- Add clinic members (Admin, Staff, Vet), change roles, activate/deactivate accounts. Summary
+  cards: **Staff**, Administrators, Veterinarians.
 - Each member shows **Online** or **Offline** (with **Last seen …** when known), or
   **Deactivated**; an **All / Online / Offline** filter with counts lists who is on right now.
   Deactivated members always count as offline. The page refreshes every minute.
@@ -137,9 +138,10 @@ top bar on phones).
 - **Owners directory** (clinic): every owner account with their pets and latest appointment,
   search, pagination, and an **All / Online / Offline** filter with counts. Each card shows
   **Online**, **Last seen …**, or **Offline** (never signed in), plus a **Pending approval** tag.
-- **Admin only:** each owner card has **Delete owner & all data** (confirmation required). It removes
-  the login, profile, pets only they own, appointments, medical records, invoices and payments;
-  pets shared with another owner are kept. Staff and vets cannot do this.
+- **Trash and Restore (Admin and Staff):** each owner card has **Move to Trash**. A trashed owner
+  can't sign in and is hidden from the directory, but nothing is deleted; the **Trash** view lists
+  them with **Restore**. Only an **Admin** can **Delete permanently**, and only from Trash (login,
+  profile, pets they alone own, appointments, medical records, invoices and payments).
 - Owner profile page and per-pet record page for the clinic. A pet's linked accounts are listed
   under **Pet Owners**.
 
@@ -153,6 +155,8 @@ top bar on phones).
 - Calendar view (green = open, orange = closed). Vets see it read-only.
 - Closing a date or changing its time automatically cancels the bookings it no longer covers.
 - Rules: end must be after start, capacity at least 1, one schedule per date and start time.
+- **Delete multiple** (Admin/Staff): select several schedules of the shown month (or Select all)
+  and delete them at once; their bookings are cancelled, each deletion is logged.
 
 ### 4.5 Appointments and online booking
 - 4-step booking: **Pet & Service → Pick a Date → Choose Time → Details** (reason, notes).
@@ -228,7 +232,8 @@ One feed of everything important, newest first, with category filters, search, a
   Chino Camilo T. Guiyab (BSIT), Vinz Auscar Baliton (BSIT), Romulo M. Umali (NDM),
   Vinverth Vince Rashid M. Ramos (NDM), Giezel Ann S. Sagadra (IS).
 - **Contact us** (`/#contact`): Cornwall Building, Stall 7 and 8, Purok 3, Vista Alegre, Bayombong,
-  Nueva Vizcaya, with a map, Get directions (Google Maps) and Book an appointment.
+  Nueva Vizcaya, with a map of the exact pin (Google Maps "Bangan Hill Veterinary Services",
+  F4HW+729), Get directions and Book an appointment.
 
 ## 5. Main workflows (step by step)
 
@@ -400,7 +405,8 @@ erDiagram
 | `mark_appointment_paid` | trigger | A paid invoice linked to a visit marks the appointment Paid |
 | `generate_invoice_number`, `generate_receipt_number` | triggers | `INV-YYYY-######`, `RCPT-YYYY-######` |
 | `book_appointment()` | function (RPC) | Owner request (`requested`): same-day until slot end, each pet once per day, refused when approved places are full |
-| `admin_delete_owner()` | function (RPC) | Admin only: deletes an owner account and all of its data in one transaction |
+| `trash_owner()`, `restore_owner()` | functions (RPC) | Admin/Staff move an owner to Trash (signed out, hidden) and back |
+| `admin_delete_owner()` | function (RPC) | Admin only: permanently deletes an owner **in Trash** and all of its data in one transaction |
 | `approve_appointment()` | function (RPC) | Admin/Staff approve a request (→ `booked`) within the slot capacity |
 | `guard_appointment_approval`, `guard_encounter_requires_approval` | triggers | Pending requests can only become approved through Approve; encounters need an approved visit |
 | `quick_bill_appointment()` | function (RPC) | All-or-nothing "Charge & Mark Paid"; refuses double billing |
@@ -516,6 +522,7 @@ see `docs/revisions/audit-report-oct-30.md`.
 | Oct 30, 2026 — PR #9 | Owners directory lists all owners with Online/Offline filter; account change logs; full days blocked on calendar; login redirect fix |
 | Oct 30, 2026 — audit | Security/consistency audit (21 items) fixed: booking bypass, forged history, vet schedule/billing access, staff privacy, encounter rules, safe one-step billing, schedule validation, counts, cleanup |
 | Oct 30, 2026 — captcha | Spam check always on in production: built-in math captcha + honeypot on sign-up and forgot password (Turnstile optional); login page fits phones |
+| Oct 30, 2026 — trash | Owners Trash/Restore (Admin+Staff), permanent delete from Trash (Admin), delete multiple schedules, Team "Staff" label, exact clinic map pin |
 | Oct 30, 2026 — services | Deworming, Grooming and Others added to booking (Others needs a reason); landing page About us and Contact us |
 | Oct 30, 2026 — schedules | Clear error messages on the live site; Add Schedule for multiple dates or a date range |
 | Oct 30, 2026 — approval | Same-day booking, each pet once per day, Admin can delete an owner and all data from the Owners tab, Admin/Staff approval with capacity limit, encounters locked until approved, email templates bundled for Vercel |
