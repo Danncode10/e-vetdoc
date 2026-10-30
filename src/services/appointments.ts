@@ -106,6 +106,52 @@ export async function getAppointmentById(id: string) {
 
 // Appointments in these statuses no longer hold a place in a schedule slot.
 const INACTIVE_BOOKING_STATUSES = ["cancelled", "no_show"] as const;
+// A schedule's capacity limits APPROVED visits; pending requests do not take a place yet.
+// Same rule as private.approved_count_in_slot() in the database.
+const PLACE_FREE_STATUSES = ["requested", ...INACTIVE_BOOKING_STATUSES] as const;
+
+/** The clinic's (Asia/Manila) current date as YYYY-MM-DD and time in minutes since midnight. */
+function clinicNow() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
+  return {
+    date: `${get("year")}-${get("month")}-${get("day")}`,
+    minutes: Number(get("hour")) * 60 + Number(get("minute")),
+  };
+}
+
+/** Whether a schedule on `date` has already ended (clinic time). Mirrors public.book_appointment(). */
+function hasSlotEnded(date: string | null, endTime: string, now = clinicNow()) {
+  if (!date) return false;
+  if (date !== now.date) return date < now.date;
+  const [endH, endM] = endTime.split(":").map(Number);
+  return now.minutes >= endH * 60 + endM;
+}
+
+/**
+ * Dates on which the signed-in owner already holds an appointment (not cancelled / no-show).
+ * Owners can book only one appointment per day, so the booking calendar blocks these dates.
+ */
+export async function listMyBookedDates(): Promise<string[]> {
+  const { user } = await requireAuth();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("appointments")
+    .select("preferred_date")
+    .eq("owner_id", user.id)
+    .gte("preferred_date", clinicNow().date)
+    .not("status", "in", `(${INACTIVE_BOOKING_STATUSES.join(",")})`);
+  if (error) throw error;
+  return [...new Set(data.map((row) => row.preferred_date).filter((d): d is string => Boolean(d)))];
+}
 
 /** Whether a booking's clinic-local time (e.g. "09:00:00") falls in [startHour, endHour). */
 function isInSlotHours(preferredTime: string | null, startHour: number, endHour: number) {
@@ -126,6 +172,71 @@ async function requireAppointmentManager(options: { allowOwner?: boolean } = {})
 
 // Only a booking that has not happened yet can be cancelled (not diagnosed, paid, etc.).
 const CANCELLABLE_STATUSES = ["booked", "requested", "scheduled", "confirmed"] as const;
+
+/** Admin / Staff approve a pending request; the database enforces the slot's capacity. */
+export async function approveAppointment(id: string) {
+  await requireAppointmentManager();
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("approve_appointment", { p_appointment_id: id });
+  if (error) throw new Error(error.message);
+  revalidatePath("/dashboard/appointments");
+  revalidatePath(`/dashboard/appointments/${id}`);
+  return data;
+}
+
+export type SlotUsage = { approved: number; capacity: number };
+
+/**
+ * For pending requests, how many visits are already approved in the same schedule slot
+ * (e.g. 2 of 3), so Admin/Staff see the limit before approving. Keyed by appointment id.
+ */
+export async function getPendingSlotUsage(): Promise<Record<string, SlotUsage>> {
+  await requireAppointmentManager();
+  const { createAdminClient } = await import("@/utils/supabase/server");
+  const admin = createAdminClient();
+
+  const { data: pending, error } = await admin
+    .from("appointments")
+    .select("id, preferred_date, preferred_time")
+    .eq("status", "requested")
+    .gte("preferred_date", clinicNow().date);
+  if (error) throw error;
+  if (!pending.length) return {};
+
+  const dates = [...new Set(pending.map((a) => a.preferred_date).filter((d): d is string => Boolean(d)))];
+  const [{ data: schedules, error: schedulesError }, { data: approved, error: approvedError }] = await Promise.all([
+    admin.from("appointment_schedules").select("*").eq("status", "active"),
+    admin
+      .from("appointments")
+      .select("preferred_date, preferred_time")
+      .in("preferred_date", dates)
+      .not("status", "in", `(${PLACE_FREE_STATUSES.join(",")})`),
+  ]);
+  if (schedulesError) throw schedulesError;
+  if (approvedError) throw approvedError;
+
+  const usage: Record<string, SlotUsage> = {};
+  for (const appt of pending) {
+    if (!appt.preferred_date) continue;
+    const date = appt.preferred_date;
+    const hour = Number((appt.preferred_time ?? "").split(":")[0]);
+    const inHours = (s: { start_time: string; end_time: string }) =>
+      Number(s.start_time.split(":")[0]) <= hour && hour < Number(s.end_time.split(":")[0]);
+    // Date-specific schedules override recurring ones (same rule as private.lock_schedule_slot).
+    const dated = (schedules ?? []).filter((s) => s.specific_date === date);
+    const candidates = dated.length
+      ? dated
+      : (schedules ?? []).filter((s) => s.is_recurring && s.day_of_week === new Date(`${date}T00:00:00Z`).getUTCDay());
+    const slot = candidates.filter(inHours).sort((a, b) => a.start_time.localeCompare(b.start_time))[0];
+    if (!slot) continue;
+    const [startH, endH] = [Number(slot.start_time.split(":")[0]), Number(slot.end_time.split(":")[0])];
+    usage[appt.id] = {
+      approved: (approved ?? []).filter((b) => b.preferred_date === date && isInSlotHours(b.preferred_time, startH, endH)).length,
+      capacity: slot.max_capacity,
+    };
+  }
+  return usage;
+}
 
 export async function cancelAppointment(id: string, reason?: string) {
   // Owners may cancel their own bookings; RLS limits them to their own rows.
@@ -227,16 +338,16 @@ export async function listAppointmentSchedules() {
       throw error;
     }
 
-    // Attach how many places each dated schedule already has taken, so the booking
-    // calendar can show full days before the owner picks them. Same counting rule as
-    // getAvailableSlots and public.book_appointment().
+    // Attach how many places each dated schedule already has taken (approved visits), so
+    // the booking calendar can show full days before the owner picks them. Same counting
+    // rule as getAvailableSlots and public.book_appointment().
     const dates = [...new Set(data.map((s) => s.specific_date).filter((d): d is string => Boolean(d)))];
     const { data: bookings, error: bookingsError } = dates.length
       ? await supabase
           .from("appointments")
           .select("preferred_date, preferred_time")
           .in("preferred_date", dates)
-          .not("status", "in", `(${INACTIVE_BOOKING_STATUSES.join(",")})`)
+          .not("status", "in", `(${PLACE_FREE_STATUSES.join(",")})`)
       : { data: [], error: null };
     if (bookingsError) throw bookingsError;
 
@@ -248,7 +359,13 @@ export async function listAppointmentSchedules() {
             (b) => b.preferred_date === schedule.specific_date && isInSlotHours(b.preferred_time, startH, endH),
           ).length
         : 0;
-      return { ...schedule, booked_count: bookedCount, is_full: bookedCount >= schedule.max_capacity };
+      return {
+        ...schedule,
+        booked_count: bookedCount,
+        is_full: bookedCount >= schedule.max_capacity,
+        // Today's schedules stay bookable until they end; later ones are closed for booking.
+        has_ended: hasSlotEnded(schedule.specific_date, schedule.end_time),
+      };
     });
   } catch (err) {
     console.error("EXACT_PG_ERROR_CATCH_listAppointmentSchedules:", JSON.stringify(err, null, 2));
@@ -519,13 +636,16 @@ export async function getAvailableSlots(
   // depend on any timezone. (scheduled_start is a UTC instant built in the booker's
   // browser timezone, so comparing it with server-local slot times broke the booking
   // limit on UTC servers such as Vercel.) This mirrors public.book_appointment().
-  const { data: bookedAppts, error: bookedError } = await supabase
+  const { data: dayAppts, error: bookedError } = await supabase
     .from("appointments")
-    .select("scheduled_start, scheduled_end, preferred_date, preferred_time")
+    .select("scheduled_start, scheduled_end, preferred_date, preferred_time, status")
     .eq("preferred_date", date)
     .not("status", "in", `(${INACTIVE_BOOKING_STATUSES.join(",")})`);
 
   if (bookedError) throw bookedError;
+  // Approved visits take a place; pending requests are shown but do not.
+  const bookedAppts = (dayAppts || []).filter((appt) => appt.status !== "requested");
+  const pendingAppts = (dayAppts || []).filter((appt) => appt.status === "requested");
 
   // 4. Build slots from schedules, marking capacity
   const slots = schedules.map((schedule) => {
@@ -536,8 +656,10 @@ export async function getAvailableSlots(
     const booked = (bookedAppts || []).filter((appt) => isInSlotHours(appt.preferred_time, startH, endH));
 
     const currentBookings = booked.length;
+    const pendingCount    = pendingAppts.filter((appt) => isInSlotHours(appt.preferred_time, startH, endH)).length;
     const available       = schedule.max_capacity - currentBookings;
-    const isAvailable     = !schedule.is_closed && available > 0;
+    const hasEnded        = hasSlotEnded(date, schedule.end_time);
+    const isAvailable     = !schedule.is_closed && !hasEnded && available > 0;
 
     // Format time for display (HH:MM AM/PM)
     const formatTime = (h: number, m: number) => {
@@ -554,6 +676,8 @@ export async function getAvailableSlots(
       currentBookings,
       available,
       isAvailable,
+      hasEnded,
+      pendingCount,
       label: `${formatTime(startH, startM)} - ${formatTime(endH, endM)}`,
     };
   });

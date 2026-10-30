@@ -1,4 +1,4 @@
-import { getAppointmentById, listOwnerAppointments } from "@/services/appointments";
+import { getAppointmentById, getPendingSlotUsage, listOwnerAppointments } from "@/services/appointments";
 import { getOwnerRegistryDetail } from "@/services/pets";
 import { requireAuth } from "@/services/authorization";
 import { notFound, redirect } from "next/navigation";
@@ -28,10 +28,12 @@ export default async function AppointmentDetailPage({
   const ownerId = appt.owner_id;
 
   // Fetch owner appointments, owner pets, and check if an encounter already exists in parallel
-  const [ownerAppointments, ownerRegistry, existingEncounter] = await Promise.all([
+  const canApprove = profile.role === "admin" || profile.role === "staff";
+  const [ownerAppointments, ownerRegistry, existingEncounter, slotUsage] = await Promise.all([
     listOwnerAppointments(ownerId).catch(() => []),
     getOwnerRegistryDetail(ownerId).catch(() => null),
     getEncounterByAppointmentId(id).catch(() => null),
+    canApprove && appt.status === "requested" ? getPendingSlotUsage().catch(() => ({})) : Promise.resolve({}),
   ]);
 
   const ownerPets = ownerRegistry?.linkedPets || [];
@@ -57,6 +59,7 @@ export default async function AppointmentDetailPage({
       onStartEncounter={handleStartEncounter}
       existingEncounter={existingEncounter}
       encounterDetails={encounterDetails}
+      slotUsage={(slotUsage as Record<string, { approved: number; capacity: number }>)[appt.id] ?? null}
     />
   );
 }

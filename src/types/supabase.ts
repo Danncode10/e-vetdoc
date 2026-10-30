@@ -985,6 +985,42 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      approve_appointment: {
+        Args: { p_appointment_id: string }
+        Returns: {
+          assigned_veterinarian_id: string | null
+          auto_cancelled: boolean
+          cancellation_reason:
+            | Database["public"]["Enums"]["cancellation_reason"]
+            | null
+          cancelled_at: string | null
+          completed_at: string | null
+          confirmed_at: string | null
+          created_at: string
+          id: string
+          mode: Database["public"]["Enums"]["appointment_mode"]
+          no_show_at: string | null
+          notes: string | null
+          owner_id: string
+          pet_id: string
+          preferred_date: string | null
+          preferred_time: string | null
+          reason: string | null
+          requested_at: string
+          rescheduled_from: string | null
+          scheduled_end: string | null
+          scheduled_start: string | null
+          service_id: string | null
+          status: Database["public"]["Enums"]["appointment_status"]
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "appointments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       book_appointment: {
         Args: {
           p_notes?: string

@@ -21,9 +21,13 @@ function fmtDate(isoOrDate: string | Date | null | undefined) {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; badge: string }> = {
+  requested: {
+    label: "Pending approval",
+    badge: "bg-muted text-foreground border-dashed border-muted-foreground/60",
+  },
   booked: {
-    label: "Booked",
-    badge: "bg-blue-100 text-blue-900 border-blue-300 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800",
+    label: "Approved",
+    badge: "bg-primary text-primary-foreground border-primary",
   },
   diagnosed: {
     label: "Diagnosed",

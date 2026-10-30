@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { createAccount, deleteAccounts, loginAndOpenDashboard, serviceDb, userDb } from './flows/accounts';
+import { accounts, createAccount, deleteAccounts, loginAndOpenDashboard, serviceDb, userDb } from './flows/accounts';
 
 // Stage 6 — automatic approval + booking limit (#6).
 // The browser runs in Philippine time, like the clinic's users. Run with TZ=UTC
@@ -116,22 +116,61 @@ test('an owner cannot book for someone else\'s pet', async () => {
   expect(error?.message).toContain('You can only book appointments for your own pets.');
 });
 
-test(`simultaneous bookings never exceed the limit of ${CAPACITY}`, async () => {
+test('new bookings wait for approval and do not take a place yet', async () => {
   const results = await Promise.all(owners.slice(0, 3).map(book));
-  const succeeded = results.filter((r) => !r.error);
+  for (const r of results) {
+    expect(r.error).toBeNull();
+    expect(r.data?.status).toBe('requested');
+  }
+});
+
+test(`simultaneous approvals never exceed the limit of ${CAPACITY}`, async () => {
+  const db = serviceDb();
+  const { data: pending } = await db
+    .from('appointments')
+    .select('id')
+    .eq('preferred_date', bookingDate)
+    .eq('status', 'requested');
+  expect(pending).toHaveLength(3);
+
+  const [admin, staff] = await Promise.all([
+    userDb(accounts.admin.email, accounts.admin.password),
+    userDb(accounts.staff.email, accounts.staff.password),
+  ]);
+  const results = await Promise.all(
+    pending!.map((a, i) => (i % 2 ? staff : admin).rpc('approve_appointment', { p_appointment_id: a.id })),
+  );
+  const approved = results.filter((r) => !r.error);
   const rejected = results.filter((r) => r.error);
 
-  expect(succeeded).toHaveLength(CAPACITY);
-  for (const r of succeeded) expect(r.data?.status).toBe('booked');
+  expect(approved).toHaveLength(CAPACITY);
+  for (const r of approved) expect(r.data?.status).toBe('booked');
   expect(rejected).toHaveLength(1);
-  expect(rejected[0].error?.message).toContain('This schedule is fully booked. Please choose another date or time.');
+  expect(rejected[0].error?.message).toContain(`This schedule already has ${CAPACITY} of ${CAPACITY} appointments approved.`);
 
-  const { count } = await serviceDb()
+  const { count } = await db
     .from('appointments')
     .select('id', { count: 'exact', head: true })
     .eq('preferred_date', bookingDate)
-    .neq('status', 'cancelled');
+    .eq('status', 'booked');
   expect(count).toBe(CAPACITY);
+});
+
+test('veterinarians cannot approve, and pending requests cannot be forced to approved', async () => {
+  const db = serviceDb();
+  const { data: stillPending } = await db
+    .from('appointments')
+    .select('id')
+    .eq('preferred_date', bookingDate)
+    .eq('status', 'requested')
+    .single();
+  const vet = await userDb(accounts.vet.email, accounts.vet.password);
+  const { error: vetError } = await vet.rpc('approve_appointment', { p_appointment_id: stillPending!.id });
+  expect(vetError?.message).toContain('Only Admin or Staff can approve appointments.');
+
+  const staff = await userDb(accounts.staff.email, accounts.staff.password);
+  const { error: bypass } = await staff.from('appointments').update({ status: 'booked' }).eq('id', stillPending!.id);
+  expect(bypass?.message).toContain('Pending appointments must be approved with Approve');
 });
 
 async function openBookingCalendar(page: Page) {
@@ -191,17 +230,18 @@ test('cancelling a booking frees its place and the 4th owner can book through th
 
   const slot = page.getByRole('button', { name: /9:00 AM - 12:00 PM/ });
   await expect(slot).toBeEnabled({ timeout: 30000 });
-  await expect(slot).toContainText(`${CAPACITY - 1}/${CAPACITY} booked`);
+  await expect(slot).toContainText(`${CAPACITY - 1}/${CAPACITY} approved`);
   await slot.click();
   await page.locator('#step-2-next-btn').click();
   await page.locator('#appt-reason').fill('Capacity test');
   await page.locator('#submit-appt-btn').click();
-  await expect(page.getByText('Appointment booked!')).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText('Appointment requested!')).toBeVisible({ timeout: 30000 });
 
-  const { count } = await db
+  const { data: rows } = await db
     .from('appointments')
-    .select('id', { count: 'exact', head: true })
+    .select('status, owner_id')
     .eq('preferred_date', bookingDate)
     .not('status', 'in', '(cancelled,no_show)');
-  expect(count).toBe(CAPACITY);
+  expect(rows!.filter((r) => r.status === 'booked')).toHaveLength(CAPACITY - 1);
+  expect(rows!.find((r) => r.owner_id === owners[3].id)?.status).toBe('requested');
 });

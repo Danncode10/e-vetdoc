@@ -152,9 +152,14 @@ top bar on phones).
 - Calendar shows **open** days (green), **full** days (red, "FULL", cannot be clicked),
   closed days, and past days (disabled).
 - Time slots show **"x/y booked · n left"**; full slots are disabled.
-- **Instant confirmation:** a booking is confirmed immediately while there is room.
-- **Booking limit:** once a slot reaches its capacity, nobody else can book it — enforced by the
-  database, so even two people clicking at the same time cannot exceed it.
+- **Clinic approval:** a booking starts as **Pending approval**. **Admin or Staff** approve it
+  (Approve button with "x/3 approved"); vets see the button greyed out. Approved visits show a
+  solid **Approved** badge. An encounter can only be started once the visit is approved.
+- **Same-day booking:** owners can book for today until the chosen slot ends; ended slots show
+  **Ended**. **One appointment per owner per day** (pending ones count; cancelling frees the day).
+- **Booking limit:** a schedule's max capacity limits **approved** visits. Approving is refused
+  once the slot is full, and new requests are refused while it is full — enforced by the
+  database, so even simultaneous approvals cannot exceed it.
 - Cancellation frees the place immediately. Owners choose personal reasons ("I need to
   reschedule", "My pet is unwell / not ready", "Other"); Admin/Staff choose clinic reasons
   ("Clinic emergency", "No veterinarian available", "Bad weather", "Other"). Vets cannot cancel.
@@ -380,7 +385,9 @@ erDiagram
 | `log_profile_update`, `log_auth_credentials_update` | triggers | Account Changes log (profile fields, email, password) |
 | `mark_appointment_paid` | trigger | A paid invoice linked to a visit marks the appointment Paid |
 | `generate_invoice_number`, `generate_receipt_number` | triggers | `INV-YYYY-######`, `RCPT-YYYY-######` |
-| `book_appointment()` | function (RPC) | Atomic, capacity-checked owner booking (Asia/Manila dates) |
+| `book_appointment()` | function (RPC) | Owner request (`requested`): same-day until slot end, one per owner per day, refused when approved places are full |
+| `approve_appointment()` | function (RPC) | Admin/Staff approve a request (→ `booked`) within the slot capacity |
+| `guard_appointment_approval`, `guard_encounter_requires_approval` | triggers | Pending requests can only become approved through Approve; encounters need an approved visit |
 | `quick_bill_appointment()` | function (RPC) | All-or-nothing "Charge & Mark Paid"; refuses double billing |
 | `create_owned_pet()` | function (RPC) | Owner adds a pet and is linked to it in one step |
 | `touch_last_seen()` | function (RPC) | Presence heartbeat for Online/Offline |
@@ -411,6 +418,7 @@ Vercel):**
 | `19-audit-fixes` | Database refuses tampering per role; billing safety; schedule rules; vet screens |
 | `20-captcha` | Captcha image not readable as text, wrong/empty answers, honeypot, single use (replay rejected), forgot-password protected |
 | `21-captcha-abuse` | Expired and tampered challenges rejected, spam burst creates at most one account, honeypot |
+| `23-same-day-once-per-day`, `24-appointment-approval` | Same-day booking, ended slots, one per day (also simultaneous); pending → approve by Staff/Admin, vet greyed out, limit 3 enforced, encounter locked until approved |
 | `22-autocancel-team-presence` | "Pet Owners" label; overdue bookings auto-cancel (started and future ones do not), indicator on list/detail, System in Logs, flag cannot be forged; Team Online/Offline badges and filter |
 
 Latest full run: **all tests passed** (see the PR for the exact count), production build passes,
@@ -444,8 +452,8 @@ see `docs/revisions/audit-report-oct-30.md`.
 1. One clinic only (no multi-branch).
 2. Every new account is pending until approved; Staff approve Vet/Owner only; Admin approves all.
 3. Deactivated or unapproved accounts lose access immediately (checked in every rule).
-4. Bookings are confirmed instantly while a slot has room; capacity = schedule's max capacity;
-   cancelled and no-show bookings do not count.
+4. Bookings are requests until Admin/Staff approve them; capacity = schedule's max capacity and
+   counts approved visits only. One appointment per owner per day; today is bookable until the slot ends.
 5. Only upcoming bookings can be cancelled; vets cannot cancel. A booking still untouched (no
    encounter) after its date has passed is cancelled automatically by the system.
 6. One encounter per appointment, started only from a booked appointment.
@@ -461,7 +469,7 @@ see `docs/revisions/audit-report-oct-30.md`.
 ## 14. Status lifecycles
 
 - **Account:** `pending` → `approved` | `rejected` (plus `is_active` on/off).
-- **Appointment (as used):** `booked` → `diagnosed` (encounter signed) → `paid`;
+- **Appointment (as used):** `requested` (Pending approval) → `booked` (Approved) → `diagnosed` (encounter signed) → `paid`;
   or `booked` → `cancelled` (by a person, or automatically by the system once the date passes). (The database also defines legacy values — requested, scheduled,
   confirmed, completed, finished, no_show — kept for older data.)
 - **Encounter:** `draft` → `signed` (+ amendments).
@@ -492,6 +500,7 @@ see `docs/revisions/audit-report-oct-30.md`.
 | Oct 30, 2026 — PR #9 | Owners directory lists all owners with Online/Offline filter; account change logs; full days blocked on calendar; login redirect fix |
 | Oct 30, 2026 — audit | Security/consistency audit (21 items) fixed: booking bypass, forged history, vet schedule/billing access, staff privacy, encounter rules, safe one-step billing, schedule validation, counts, cleanup |
 | Oct 30, 2026 — captcha | Spam check always on in production: built-in math captcha + honeypot on sign-up and forgot password (Turnstile optional); login page fits phones |
+| Oct 30, 2026 — approval | Same-day booking, one appointment per owner per day, Admin/Staff approval with capacity limit, encounters locked until approved, email templates bundled for Vercel |
 | Oct 30, 2026 — fixes | "Authorized Owners" renamed "Pet Owners"; overdue bookings auto-cancel with an Auto-cancelled indicator; Team tab Online/Offline badges + filter; Owners tab shows "Offline" instead of "Never signed in"; copy-paste SQL to delete an account (`docs/supabase/delete-account-by-email.sql`) |
 
 ## 17. Glossary

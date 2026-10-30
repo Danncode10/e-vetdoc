@@ -50,8 +50,11 @@ export async function startEncounterForAppointment(appointmentId: string) {
     .eq("id", appointmentId)
     .single();
   if (appointmentError) throw appointmentError;
+  if (appointment.status === "requested") {
+    throw new Error("This appointment is still pending. Admin or Staff must approve it before an encounter can start.");
+  }
   if (appointment.status !== "booked") {
-    throw new Error("An encounter can only be started for a booked appointment.");
+    throw new Error("An encounter can only be started for an approved appointment.");
   }
 
   const { data, error } = await supabase

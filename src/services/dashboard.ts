@@ -99,8 +99,8 @@ export async function getOwnerDashboardSummary(): Promise<OwnerDashboardSummary>
       service:services!appointments_service_id_fkey (id, name, duration_minutes, price_from)
     `)
     .eq('owner_id', profile.id)
-    // Upcoming = still booked and not in the past, soonest first.
-    .eq('status', 'booked')
+    // Upcoming = pending approval or approved, and not in the past, soonest first.
+    .in('status', ['requested', 'booked'])
     .gte('preferred_date', clinicToday())
     .order('preferred_date', { ascending: true, nullsFirst: false })
     .limit(5);
@@ -173,11 +173,11 @@ export async function getAdminDashboardSummary(): Promise<AdminDashboardSummary>
     supabase.from("pets").select("id", { count: "exact", head: true }),
     // Same rule as the Owners tab: every owner account except disapproved sign-ups.
     supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "owner").neq("approval_status", "rejected"),
-    // Active = visits still to be seen (booked) or seen but not yet paid (diagnosed).
+    // Active = pending approval, approved and still to be seen, or seen but not yet paid.
     supabase
       .from("appointments")
       .select("id", { count: "exact", head: true })
-      .in("status", ["booked", "diagnosed"]),
+      .in("status", ["requested", "booked", "diagnosed"]),
     supabase
       .from("invoices")
       .select("id", { count: "exact", head: true })

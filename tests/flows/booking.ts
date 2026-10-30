@@ -94,5 +94,5 @@ export async function runOwnerBookingFlow(page: Page) {
   await page.locator('#appt-reason').fill('Checkup test');
   await page.locator('#submit-appt-btn').click();
   
-  await expect(page.locator('text=Appointment booked!')).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('text=Appointment requested!')).toBeVisible({ timeout: 15000 });
 }

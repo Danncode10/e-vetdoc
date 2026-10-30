@@ -1,5 +1,7 @@
 "use client";
 
+import { appointmentStatusLabel } from "@/lib/appointment-status";
+
 import * as React from "react";
 import {
   PawPrint,
@@ -308,7 +310,7 @@ export function OverviewTab({ displayName, setTab, role }: OverviewTabProps) {
                         </p>
                       </div>
                       <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary capitalize">
-                        {apt.status.replace("_", " ")}
+                        {appointmentStatusLabel(apt.status)}
                       </span>
                     </div>
                   </Card>
@@ -421,7 +423,7 @@ export function OverviewTab({ displayName, setTab, role }: OverviewTabProps) {
                         </p>
                       </div>
                       <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary capitalize">
-                        {apt.status.replace("_", " ")}
+                        {appointmentStatusLabel(apt.status)}
                       </span>
                     </div>
                   </Card>
