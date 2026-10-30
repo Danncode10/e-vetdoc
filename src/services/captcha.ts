@@ -80,6 +80,13 @@ async function verifyBuiltin(token: string, answer: string | undefined): Promise
   // Each solved challenge works once.
   const { data, error } = await createAdminClient().rpc("consume_captcha_challenge", { p_nonce: challenge.n });
   if (error) {
+    // PGRST202 = the function does not exist yet (code deployed before `supabase db push`).
+    // The signed answer and expiry were still checked, so let real users through and shout
+    // in the logs instead of blocking every sign-up.
+    if (error.code === "PGRST202") {
+      console.error("CAPTCHA: run `supabase db push` — consume_captcha_challenge() is missing, so answers are not single-use yet.");
+      return true;
+    }
     console.error("consume_captcha_challenge failed:", error.message);
     return false;
   }

@@ -42,7 +42,9 @@ instead of the math question (the honeypot stays).
   solve it. Production builds never send it (checked against a production build).
 
 ## Rollout
-1. `supabase db push` on the production project (adds the single-use table/function).
+1. `supabase db push` on the production project (adds the single-use table/function). If the code
+   is deployed first, the captcha still works (signed answer + expiry) but answers are not
+   single-use yet, and the server logs `CAPTCHA: run supabase db push` until the migration runs.
 2. Merge the PR → Vercel deploys. Nothing to configure. (Optional: set `CAPTCHA_SECRET`.)
 3. Check: open the live site → **Create Account** → the math question is shown.
 

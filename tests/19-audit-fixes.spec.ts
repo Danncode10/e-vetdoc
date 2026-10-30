@@ -264,7 +264,8 @@ test.describe('screens', () => {
     pets.push(future.petId);
     appointments.push(future.appointmentId);
     await page.reload();
-    await expect(page.getByText('No upcoming visits scheduled')).toHaveCount(0, { timeout: 30000 });
-    await expect(page.getByText('booked', { exact: true }).first()).toBeVisible();
+    // Wait for the card itself (the empty message is also absent while the page loads).
+    await expect(page.getByText('booked', { exact: true }).first()).toBeVisible({ timeout: 30000 });
+    await expect(page.getByText('No upcoming visits scheduled')).toHaveCount(0);
   });
 });
