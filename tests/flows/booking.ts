@@ -1,4 +1,5 @@
 import { expect, Page } from '@playwright/test';
+import { solveSpamCheck } from './captcha';
 
 export async function runAdminScheduleFlow(page: Page) {
   await page.goto('/login');
@@ -8,6 +9,7 @@ export async function runAdminScheduleFlow(page: Page) {
   
   await page.locator('#email').fill(adminEmail);
   await page.locator('#password').fill(adminPassword);
+  await solveSpamCheck(page);
   await page.locator('button[type="submit"]').click();
   
   await expect(page.locator('text=Welcome back!').or(page.locator('text=Login successful!'))).toBeVisible({ timeout: 15000 });
@@ -43,6 +45,7 @@ export async function runOwnerBookingFlow(page: Page) {
   await page.waitForLoadState('networkidle');
   await page.locator('#email').fill(ownerEmail);
   await page.locator('#password').fill(ownerPassword);
+  await solveSpamCheck(page);
   await page.locator('button[type="submit"]').click();
   
   await expect(page.locator('text=Welcome back!').or(page.locator('text=Login successful!'))).toBeVisible({ timeout: 15000 });

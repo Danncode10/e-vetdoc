@@ -131,15 +131,13 @@ export default function AuthPage() {
       return;
     }
 
-    if (mode !== 'login') {
-      if (!captcha.token) {
-        setError('Please wait for the spam check to load.');
-        return;
-      }
-      if (captcha.answer !== undefined && !captcha.answer.trim()) {
-        setError('Answer the spam check question.');
-        return;
-      }
+    if (!captcha.token) {
+      setError('Please wait for the spam check to load.');
+      return;
+    }
+    if (captcha.answer !== undefined && !captcha.answer.trim()) {
+      setError('Answer the spam check question.');
+      return;
     }
 
     setLoading(true);
@@ -158,7 +156,8 @@ export default function AuthPage() {
         setResetSentTo(email);
         toast.success('Reset email sent', { description: `Check ${email} for the setup link.` });
       } else if (mode === 'login') {
-        const result = await signInWithEmailRateLimited(email, password);
+        const result = await signInWithEmailRateLimited(email, password, captcha);
+        refreshCaptcha();
         if (result.error) throw new Error(result.error);
         if (result.requiresMFA) {
           router.push('/auth/mfa');
@@ -781,7 +780,7 @@ export default function AuthPage() {
                   </div>
                 )}
 
-                {mode !== 'login' && <SpamCheck key={captchaKey} onChange={setCaptcha} />}
+                <SpamCheck key={captchaKey} onChange={setCaptcha} />
 
                 {error && (
                   <div style={{

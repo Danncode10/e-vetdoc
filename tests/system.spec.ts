@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { solveSpamCheck } from './flows/captcha';
 
 test.describe('System Check - Login', () => {
   test('should login successfully with owner test account', async ({ page }) => {
@@ -19,6 +20,7 @@ test.describe('System Check - Login', () => {
 
     await page.locator('#email').fill(email);
     await page.locator('#password').fill(password);
+    await solveSpamCheck(page);
     
     // Submit form
     await page.locator('button[type="submit"]').click();

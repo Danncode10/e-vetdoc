@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { solveSpamCheck } from './captcha';
 import { expect, type Page } from '@playwright/test';
 import type { Database } from '../../src/types/supabase';
 
@@ -100,6 +101,7 @@ export async function loginThroughUi(page: Page, email: string, password: string
   await page.waitForLoadState('networkidle');
   await page.locator('#email').fill(email);
   await page.locator('#password').fill(password);
+  await solveSpamCheck(page);
   await page.locator('button[type="submit"]').click();
 }
 

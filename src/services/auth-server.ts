@@ -23,9 +23,13 @@ function getPasswordScore(password: string) {
   return score;
 }
 
-export async function signInWithEmailRateLimited(email: string, password: string) {
+export async function signInWithEmailRateLimited(email: string, password: string, captcha?: CaptchaSubmission) {
   const { success } = await verifyRateLimit(email, "sign-in");
   if (!success) return { error: 'Too many login attempts. Try again in a few moments.' };
+  // Stops bots from guessing passwords.
+  if (!(await verifyCaptcha(captcha))) {
+    return { error: captchaError() };
+  }
 
   const supabase = await createClient();
   const { error: signInError } = await supabase.auth.signInWithPassword({

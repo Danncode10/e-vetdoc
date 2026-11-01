@@ -1,4 +1,5 @@
 import { expect, Page } from '@playwright/test';
+import { solveSpamCheck } from './captcha';
 
 export async function runVetClinicalFlow(page: Page) {
   // Use Admin credentials because unassigned appointments are only visible to admins due to RLS
@@ -9,6 +10,7 @@ export async function runVetClinicalFlow(page: Page) {
   await page.waitForLoadState('networkidle');
   await page.locator('#email').fill(loginEmail);
   await page.locator('#password').fill(loginPassword);
+  await solveSpamCheck(page);
   await page.locator('button[type="submit"]').click();
 
   await expect(page.locator('text=Welcome back!').or(page.locator('text=Login successful!'))).toBeVisible({ timeout: 15000 });
@@ -87,6 +89,7 @@ export async function runAdminAuditVerification(page: Page) {
   const actualAdminPassword = process.env.TEST_ADMIN_PASSWORD!;
   await page.locator('#email').fill(actualAdminEmail);
   await page.locator('#password').fill(actualAdminPassword);
+  await solveSpamCheck(page);
   await page.locator('button[type="submit"]').click();
   
   await expect(page.locator('text=Welcome back!').or(page.locator('text=Login successful!'))).toBeVisible({ timeout: 15000 });
