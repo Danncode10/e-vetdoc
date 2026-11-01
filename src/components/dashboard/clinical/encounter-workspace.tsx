@@ -21,7 +21,8 @@ import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { saveEncounterDraft, signEncounter } from "@/services/clinical";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Download } from "lucide-react";
+import { Download, Receipt } from "lucide-react";
+import { QuickBillingDialog } from "@/components/dashboard/billing/quick-billing-dialog";
 
 interface EncounterWorkspaceProps {
   encounterData: any;
@@ -56,6 +57,22 @@ export function EncounterWorkspace({
   const [prescriptions, setPrescriptions] = React.useState<any[]>(encounterData.prescriptions || []);
 
   const isSigned = enc.status === "signed";
+
+  // Billing is the front desk's job (Admin/Staff); vets see the button greyed out.
+  const [isBillingOpen, setIsBillingOpen] = React.useState(false);
+  const canBill = profile?.role === "admin" || profile?.role === "staff";
+  const appointment = enc.appointment;
+  const showContinueToPayment = isSigned && appointment?.status === "diagnosed";
+
+  const handleContinueToPayment = () => {
+    if (!canBill) {
+      toast.error("Only Staff and Admin can do this", {
+        description: "Ask the front desk to charge and mark this visit as paid.",
+      });
+      return;
+    }
+    setIsBillingOpen(true);
+  };
 
   const addDiagnosis = () => setDiagnoses([...diagnoses, { description: "", diagnosis_code: "", notes: "" }]);
   const updateDiagnosis = (i: number, field: string, value: string) => {
@@ -408,6 +425,32 @@ export function EncounterWorkspace({
               </Button>
             </div>
           )}
+
+          {showContinueToPayment && (
+            <div className="mt-8 flex flex-col gap-4 rounded-2xl border-2 border-primary/40 bg-primary/5 p-6 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-foreground">Record signed. Next step: payment</p>
+                  <p className="text-xs text-muted-foreground">
+                    {canBill
+                      ? "Charge the visit and mark it as paid."
+                      : "Only Staff and Admin can take payment for this visit."}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant={canBill ? "default" : "outline"}
+                onClick={handleContinueToPayment}
+                aria-disabled={!canBill}
+                title={canBill ? undefined : "Only Staff and Admin can do this"}
+                className={`h-12 gap-2 px-8 font-semibold shadow-sm ${canBill ? "" : "cursor-not-allowed bg-muted text-muted-foreground opacity-60 hover:bg-muted"}`}
+              >
+                <Receipt className="h-4 w-4" />
+                Continue to Payment
+              </Button>
+            </div>
+          )}
         </div>
         )}
 
@@ -477,6 +520,15 @@ export function EncounterWorkspace({
           </div>
         )}
       </div>
+      {canBill && showContinueToPayment && (
+        <QuickBillingDialog
+          appointmentId={enc.appointment_id}
+          serviceDescription={appointment?.services?.name ?? "Veterinary Consultation"}
+          suggestedAmount={appointment?.services?.price_from ? Number(appointment.services.price_from) : 0}
+          open={isBillingOpen}
+          onOpenChange={setIsBillingOpen}
+        />
+      )}
       <ConfirmationDialog
         open={isSignDialogOpen}
         onOpenChange={setIsSignDialogOpen}

@@ -229,7 +229,7 @@ export async function getEncounterDetails(id: string) {
       *,
       pets (id, name, species, breed, sex, date_of_birth, age, color, notes),
       veterinarian:profiles!encounters_veterinarian_id_fkey (id, full_name, email),
-      appointment:appointments (id, reason, scheduled_start)
+      appointment:appointments (id, reason, scheduled_start, status, services (name, price_from))
     `)
     .eq("id", id)
     .single();
