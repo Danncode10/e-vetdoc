@@ -113,7 +113,7 @@ top bar on phones).
   Veterinarian, or Owner.
 - Email confirmation, then the account stays **Pending** until the clinic approves it.
   Pending/disapproved users cannot sign in; they see an *account status* page instead.
-- **Spam check (captcha)** on sign-up and forgot-password: a built-in math question drawn as a
+- **Spam check (captcha)** on sign-in, sign-up and forgot-password: a built-in math question drawn as a
   distorted image (single use, expires in 10 minutes) plus a hidden honeypot field. If Cloudflare
   Turnstile keys are configured, Turnstile is used instead. Works in production with no setup.
 - **Approvals** tab (Admin/Staff): each request shows name, email, requested role and date, with
@@ -200,6 +200,8 @@ top bar on phones).
   **prescriptions** (medication, dosage, frequency, duration, instructions). Save as draft anytime.
 - **Sign & lock:** after signing, the record cannot be edited; corrections are added as
   **amendments** (who and when are recorded). Signing marks the appointment **Diagnosed**.
+- **Continue to Payment:** after signing, a panel at the bottom of the workspace opens Charge &
+  Mark Paid. Admin/Staff only; for vets the button is greyed out and says only Staff and Admin can do it.
 - Printable encounter report (with PDF download) and printable prescriptions.
 - Owners see **signed** records of their own pets (if they have the "view medical records"
   permission); drafts are never visible to owners.
@@ -266,7 +268,8 @@ One feed of everything important, newest first, with category filters, search, a
 3. **Signs & locks** → appointment becomes **Diagnosed**; owner can now view the record.
 
 **5.4 Billing**
-1. Staff opens the diagnosed appointment → **Charge & Mark Paid** → amount, VAT, method.
+1. Staff opens the diagnosed appointment → **Charge & Mark Paid** (or **Continue to Payment** at the
+   bottom of the signed encounter) → amount, VAT, method.
 2. Invoice + payment + receipt are created at once; appointment becomes **Paid**; owner gets an
    email; receipt can be printed.
 
@@ -390,7 +393,7 @@ erDiagram
 4. **Server-side role guards** on every page and server action (defence in depth).
 5. **Booking integrity** — owners can only book through `book_appointment()` (capacity check
    with a row lock); direct inserts are blocked.
-6. **Bot and abuse protection** — spam check on sign-up and password reset (built-in math captcha:
+6. **Bot and abuse protection** — spam check on sign-in, sign-up and password reset (built-in math captcha:
    the answer is never sent to the browser, the challenge is HMAC-signed, expires in 10 minutes and
    is single use via `consume_captcha_challenge()`; plus a honeypot field; Cloudflare Turnstile
    when configured), checked before any account is created or email sent; rate limits on sign-in,
@@ -533,6 +536,7 @@ see `docs/revisions/audit-report-oct-30.md`.
 | Oct 30, 2026 — PR #9 | Owners directory lists all owners with Online/Offline filter; account change logs; full days blocked on calendar; login redirect fix |
 | Oct 30, 2026 — audit | Security/consistency audit (21 items) fixed: booking bypass, forged history, vet schedule/billing access, staff privacy, encounter rules, safe one-step billing, schedule validation, counts, cleanup |
 | Oct 30, 2026 — captcha | Spam check always on in production: built-in math captcha + honeypot on sign-up and forgot password (Turnstile optional); login page fits phones |
+| Nov 1, 2026 — payment + login captcha | "Continue to Payment" panel after signing an encounter (Admin/Staff; greyed out for vets); spam check now required on sign-in |
 | Oct 30, 2026 — trash 2 | Trash/Restore for pets and team members; typed "DELETE" confirmation on every permanent delete |
 | Oct 30, 2026 — trash | Owners Trash/Restore (Admin+Staff), permanent delete from Trash (Admin), delete multiple schedules, Team "Staff" label, exact clinic map pin |
 | Oct 30, 2026 — services | Deworming, Grooming and Others added to booking (Others needs a reason); landing page About us and Contact us |
